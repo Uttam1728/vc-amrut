@@ -238,18 +238,18 @@
   @page { margin: 14mm 0; } /* top/bottom; the sides are padding below, so they survive a "Margins: None" print setting */
   body > *:not(#print-root) { display: none !important; }
   html, body { background: #fff !important; }
-  #print-root { display: block; color: #1a1612; font-family: var(--font-sans); font-size: 11pt; padding: 0 16mm; }
+  #print-root { display: block; color: #1a1612; font-family: var(--font-sans); font-size: 9.5pt; padding: 0 16mm; }
   #print-root header { border-bottom: 2px solid #d9822b; padding-bottom: 10pt; margin-bottom: 14pt; }
-  #print-root .pr-app { color: #b8651d; font-size: 9pt; font-weight: 600; letter-spacing: .04em; margin: 0; }
-  #print-root h1 { font-family: var(--font-serif); font-size: 22pt; margin: 4pt 0 0; }
-  #print-root .pr-sub { font-size: 12pt; margin: 2pt 0 0; }
-  #print-root .pr-meta { color: #6b625a; font-size: 9pt; margin: 6pt 0 0; }
+  #print-root .pr-app { color: #b8651d; font-weight: 600; letter-spacing: .04em; margin: 0; }
+  #print-root h1 { font-family: var(--font-serif); font-size: 20pt; margin: 4pt 0 0; }
+  #print-root .pr-sub { margin: 3pt 0 0; }
+  #print-root .pr-meta { color: #6b625a; margin: 3pt 0 0; }
   #print-root h2 { font-size: 13pt; margin: 16pt 0 6pt; padding-bottom: 3pt; border-bottom: 1px solid #e6ddd2; break-after: avoid; }
   #print-root article { break-inside: avoid; margin: 0 0 11pt; }
-  #print-root .pr-ref { color: #b8651d; font-weight: 600; font-size: 10pt; margin: 0; }
+  #print-root .pr-ref { color: #b8651d; font-weight: 600; margin: 0; }
   #print-root .pr-n { color: #6b625a; font-weight: 500; }
   #print-root .pr-title { color: #6b625a; font-weight: 400; }
-  #print-root .pr-where { color: #6b625a; font-size: 9pt; margin: 1pt 0 0; }
+  #print-root .pr-where { color: #6b625a; margin: 1pt 0 0; }
   #print-root blockquote { font-family: var(--font-serif); font-size: 12.5pt; line-height: 1.75; margin: 3pt 0 0; }
-  #print-root footer { color: #8a8178; font-size: 8pt; margin-top: 18pt; text-align: center; }
+  #print-root footer { color: #8a8178; margin-top: 18pt; text-align: center; }
 }

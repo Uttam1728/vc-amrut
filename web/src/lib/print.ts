@@ -28,11 +28,17 @@ export function printPdf({ title, subtitle, sections, site }: { title: string; s
           </article>`).join("")}
       </section>`).join("")}
     <footer>${esc(site)}</footer>`
+  document.getElementById("print-root")?.remove() // left over if a phone never reported the last print closing
   document.body.append(root)
   const prevTitle = document.title
   document.title = `${title}${subtitle ? ` – ${subtitle}` : ""} · વચનામૃત` // becomes the PDF's file name
-  const done = () => (root.remove(), (document.title = prevTitle), removeEventListener("afterprint", done))
-  addEventListener("afterprint", done)
-  // let fonts/layout settle for the new node before the print dialog snapshots it
-  requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
+  // Resolves when the print/PDF window closes, so the button can show "ready".
+  return new Promise<void>((resolve) => {
+    const done = () => (root.remove(), (document.title = prevTitle), removeEventListener("afterprint", done), resolve())
+    addEventListener("afterprint", done)
+    // a short beat so the "making PDF…" state is seen and fonts/layout settle before the dialog snapshots the page
+    setTimeout(() => window.print(), 350)
+    // If a phone never reports the print window closing, free the button after a while (keep the page until then).
+    setTimeout(resolve, 20000)
+  })
 }

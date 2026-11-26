@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform } from "motion/react"
 import {
-  ALargeSmall, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy,
+  ALargeSmall, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy,
   Dices, FileDown, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
   Shuffle, Sun, Trash2, X,
 } from "lucide-react"
@@ -118,9 +118,10 @@ export default function App() {
   }, [data])
 
   const topics = data ? Object.keys(data) : []
-  const current = route.t && (route.t === TODAY || route.t === SAVED || (data && route.t in data)) ? route.t : HOME
+  const current = route.t && (route.t === TODAY || route.t === SAVED || route.t === TOPICS || (data && route.t in data)) ? route.t : HOME
+  useEffect(() => void document.querySelector("main")?.scrollTo(0, 0), [current])
   useEffect(() => {
-    if (current === HOME) return
+    if (current === HOME || current === TOPICS) return
     const here = linkTo({ ...route, t: current }).split("#")[1]
     localStorage.setItem("last", here)
     if (current !== TODAY && current !== SAVED) localStorage.setItem("lastTopic", here) // where the Topics tab returns to
@@ -135,7 +136,7 @@ export default function App() {
     }
     // Saved: favorites first, then the student's own lists — each one shows up as a "subtopic".
     if (current === SAVED) return [{ name: FAV, items: saved }, ...lists].filter((s) => s.items.length)
-    if (current === HOME) return []
+    if (current === HOME || current === TOPICS) return []
     return data[current].map((s) => ({ name: s.name, items: s.quotes?.map((quote) => ({ topic: current, sub: s.name, quote })) }))
   }, [data, current, unique, saved, lists])
 
@@ -193,7 +194,7 @@ export default function App() {
                   const on = current === SAVED && route.s === l.name
                   return (
                     <a key={l.name} href={"#" + new URLSearchParams({ t: SAVED, s: l.name })}
-                      className={cn("press ml-5 flex items-center gap-2 rounded-md border-l px-2.5 py-1.5 text-[0.8125rem]",
+                      className={cn("press ml-5 flex items-center gap-2 rounded-md border-l px-2.5 py-1.5 text-sm",
                         on ? "border-saffron font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
                       {l.name === FAV ? <Heart className="size-3.5" /> : <ListChecks className="size-3.5" />}
                       <span className="flex-1 truncate">{l.name === FAV ? "પસંદગી · Favorites" : l.name}</span>
@@ -220,6 +221,8 @@ export default function App() {
       <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {!data ? (
           <LoadingSkeleton />
+        ) : current === TOPICS && !searching ? (
+          <TopicsPage data={data} />
         ) : searching || current === HOME ? (
           <Home data={data} unique={unique} query={query} setQuery={setQuery} searching={searching} results={results} savedCount={savedCount} />
         ) : (
@@ -233,7 +236,7 @@ export default function App() {
           />
         )}
       </main>
-      <TabBar current={current} savedCount={savedCount} firstTopic={topics[0]} />
+      <TabBar current={current} savedCount={savedCount} />
     </div>
   )
 }
@@ -260,10 +263,9 @@ function LoadingSkeleton() {
 }
 
 /** Phone navigation lives at the bottom, in thumb reach. Topics count as "Home" — that's where you pick them. */
-function TabBar({ current, savedCount, firstTopic }: { current: string; savedCount: number; firstTopic?: string }) {
+function TabBar({ current, savedCount }: { current: string; savedCount: number }) {
   // Each tab is highlighted only where it leads: Home = the home page, Topics = any topic you're reading.
   const active = current === HOME || current === TODAY || current === SAVED ? current : TOPICS
-  const topicsHref = "#" + (localStorage.getItem("lastTopic") ?? (firstTopic ? new URLSearchParams({ t: firstTopic }) : ""))
   const tabs = [
     [HOME, House, "હોમ"],
     [TOPICS, BookOpen, "વિષયો"],
@@ -278,9 +280,9 @@ function TabBar({ current, savedCount, firstTopic }: { current: string; savedCou
         return (
           <a
             key={t}
-            href={t === HOME ? "#" : t === TOPICS ? topicsHref : "#" + new URLSearchParams({ t })}
+            href={t === HOME ? "#" : "#" + new URLSearchParams({ t })}
             aria-current={on ? "page" : undefined}
-            className={cn("press relative flex flex-1 flex-col items-center gap-0.5 py-2 text-[0.6875rem] transition-colors duration-150", on ? "text-foreground" : "text-muted-foreground")}
+            className={cn("press relative flex flex-1 flex-col items-center gap-0.5 py-2 text-xs transition-colors duration-150", on ? "text-foreground" : "text-muted-foreground")}
           >
             {on && <motion.span layoutId="tab" className="absolute inset-0 rounded-[1.4rem] bg-saffron-soft" transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }} />}
             <Icon className={cn("relative size-[22px]", on && "text-saffron", on && t === SAVED && "fill-current")} strokeWidth={on ? 2.2 : 1.8} />
@@ -378,7 +380,7 @@ function ItemLabel({ item }: { item: string }) {
   return (
     <span className="flex min-w-0 flex-1 flex-col">
       <span className="leading-snug">{item}</span>
-      {!special && <span className="truncate text-[0.6875rem] text-muted-foreground">{translit(item)}</span>}
+      {!special && <span className="truncate text-xs text-muted-foreground">{translit(item)}</span>}
     </span>
   )
 }
@@ -499,19 +501,19 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
         })),
       })),
     })
-  const pdfButton = !empty && (
-    <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" onClick={exportPdf}
-      aria-label="PDF બનાવો · Save as PDF" data-tip="PDF બનાવો">
-      <FileDown className="size-5" />
-    </Button>
-  )
+  const pdfButton = !empty && <PdfButton onExport={exportPdf} />
 
   const bar = (
     <div className="glow-header sticky top-0 z-10 pt-[env(safe-area-inset-top,0px)]">
       <div className="flex min-h-12 items-center justify-between pt-1.5 pr-2 pl-4 md:hidden">
-        <p className="text-sm font-semibold tracking-tight">વચનામૃત અમૃત બિંદુ</p>
+        <p className="text-base font-semibold tracking-tight">વચનામૃત અમૃત બિંદુ</p>
         <div className="flex items-center">{pdfButton}<HeaderButtons /></div>
       </div>
+      {title === TODAY ? (
+        <p className="px-4 pt-1 pb-3 text-sm text-muted-foreground md:hidden">
+          <span className="font-medium text-foreground">આજનાં વચનામૃત</span> · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
+        </p>
+      ) : (
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 pt-1 pb-3 md:flex-row md:gap-3 md:px-10 md:pt-3">
         <Picker label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
         <Picker
@@ -522,6 +524,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
           count={(n) => (n === ALL ? sectionCount(sections) : (sections.find((s) => s.name === n)?.items?.length ?? null))}
         />
       </div>
+      )}
     </div>
   )
 
@@ -563,13 +566,9 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
             <p className="text-sm text-muted-foreground tabular-nums">
               {sub ? `${subLabel} ${idx + 1} / ${sections.length} · ${items.length} અમૃત બિંદુ` : meta}
             </p>
-            {!empty && (
-              <Button variant="outline" size="sm" className="press h-8 gap-1.5 rounded-full" onClick={exportPdf}>
-                <FileDown className="size-3.5" /> PDF
-              </Button>
-            )}
+            {!empty && <PdfButton onExport={exportPdf} labelled />}
           </div>
-          {sections.length > 1 && (
+          {sections.length > 1 && title !== TODAY && (
             <div className="mt-6 max-w-md">
               <Picker
                 label={subLabel}
@@ -591,7 +590,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     {n === 0 ? <><ChevronLeft className="size-3.5" /> પાછલો</> : <>આગલો <ChevronRight className="size-3.5" /></>}
                   </span>
-                  <span className="text-[0.9375rem] font-medium">{s.name}</span>
+                  <span className="text-base font-medium">{s.name}</span>
                 </a>
               ) : null,
             )}
@@ -600,6 +599,60 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
       </article>
       {!empty && sections.length > 1 && <OnThisPage sections={sections} sub={sub} href={subHref} />}
     </div>
+  )
+}
+
+/**
+ * PDF button with visible states (ideas: transitions.dev "Text states swap" + "Success check"):
+ * icon → "PDF બને છે…" with a spinner → drawn ✓ "PDF તૈયાર" when the print window closes → back to the icon.
+ * The pill grows/shrinks smoothly (layout) and each state crossfades with a little blur.
+ */
+function PdfButton({ onExport, labelled }: { onExport: () => Promise<void>; labelled?: boolean }) {
+  const [state, setState] = useState<"idle" | "making" | "done">("idle")
+  const go = async () => {
+    if (state !== "idle") return
+    setState("making")
+    await onExport()
+    setState("done")
+    setTimeout(() => setState("idle"), 1800)
+  }
+  return (
+    <motion.button
+      layout
+      onClick={go}
+      aria-label="PDF બનાવો · Save as PDF"
+      data-tip={labelled ? undefined : "PDF બનાવો"}
+      transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+      className={cn(
+        "press inline-flex items-center justify-center overflow-hidden rounded-full text-muted-foreground",
+        labelled ? "h-8 border px-3 text-sm" : "h-11 min-w-11 px-2.5 md:h-9 md:min-w-9",
+        state !== "idle" && "bg-saffron-soft text-foreground",
+      )}
+      style={{ borderRadius: 999 }}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={state}
+          initial={{ opacity: 0, y: 4, filter: "blur(4px)" }}
+          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+          exit={{ opacity: 0, y: -4, filter: "blur(4px)" }}
+          transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+          className="flex items-center gap-1.5 whitespace-nowrap"
+          aria-live="polite"
+        >
+          {state === "idle" && <><FileDown className={labelled ? "size-3.5" : "size-5"} />{labelled && "PDF"}</>}
+          {state === "making" && <><LoaderCircle className="size-4 animate-spin text-saffron" /><span className="text-sm">PDF બને છે…</span></>}
+          {state === "done" && (
+            <>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="size-4 text-saffron" aria-hidden>
+                <motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }} />
+              </svg>
+              <span className="text-sm">PDF તૈયાર</span>
+            </>
+          )}
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
   )
 }
 
@@ -672,7 +725,7 @@ function OnThisPage({ sections, sub, href }: { sections: Section[]; sub: string 
   return (
     <aside className="sticky top-28 hidden max-h-[calc(100dvh-8rem)] w-56 shrink-0 self-start overflow-y-auto xl:block">
       <p className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{sub ? "બધા પેટા વિષયો" : "આ પાના પર"}</p>
-      <ul className="relative space-y-2 border-l text-[0.8125rem]">
+      <ul className="relative space-y-2 border-l text-sm">
         <span
           aria-hidden
           className="absolute top-0 -left-px w-px bg-saffron transition-[transform,height] duration-200 ease-(--ease-out)"
@@ -1032,6 +1085,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
   const q = query.trim()
   const topics = Object.keys(data).filter((t) => !q || matches(t, q) || results.some((r) => r.topic === t))
   const today = unique.length ? todays(unique)[0] : null
+  const [picks] = useState(() => [...Object.keys(data)].sort(() => Math.random() - 0.5).slice(0, 4))
   const [feedback, setFeedback] = useState(false)
   const last = new URLSearchParams(localStorage.getItem("last") ?? "")
   const lastTopic = last.get("t")
@@ -1045,7 +1099,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
     <div className="mx-auto max-w-5xl px-4 pb-10 md:px-10 md:py-10">
       {/* banner: the Vachanamrut being spoken — tells a first-time reader what this is */}
       <header className="relative -mx-4 overflow-hidden rounded-b-3xl md:mx-0 md:rounded-3xl">
-        <img src={IMAGES.sabha.src} alt={IMAGES.sabha.alt} className="h-64 w-full object-cover object-[65%_35%] md:h-80" />
+        <img src={IMAGES.sabha.src} alt={IMAGES.sabha.alt} title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="h-64 w-full object-cover object-[65%_35%] md:h-80" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
         <div className="absolute right-2 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] rounded-full bg-background/60 backdrop-blur-md md:hidden">
           <HeaderButtons />
@@ -1070,7 +1124,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
           {today && (
             <a href={"#" + new URLSearchParams({ t: TODAY })}
               className="card-glow press group relative mt-3 block overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:mt-8 md:pt-28 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.14)] transition-shadow duration-200 md:mt-0 md:p-7 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_20px_40px_-14px_rgba(0,0,0,0.2)]">
-              <img src={IMAGES.manuscript.src} alt="" aria-hidden className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
+              <img src={IMAGES.manuscript.src} alt="" aria-hidden title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
               <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                 <CalendarDays className="size-3.5 text-saffron" /> આજનાં વચનામૃત · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
                 <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">1 / {TODAY_COUNT}</span>
@@ -1092,7 +1146,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
             {lastTopic && (lastTopic === SAVED || lastTopic === TODAY || lastTopic in data) ? (
               <QuickLink href={"#" + last} icon={<History className="size-[18px]" />} label="આગળ વાંચો" sub={lastTopic.split(" · ")[0]} />
             ) : (
-              <QuickLink href={"#" + new URLSearchParams({ t: Object.keys(data)[0] })} icon={<History className="size-[18px]" />} label="વાંચવાનું શરૂ કરો" sub={Object.keys(data)[0]} />
+              <QuickLink href={"#" + new URLSearchParams({ t: TOPICS })} icon={<History className="size-[18px]" />} label="વાંચવાનું શરૂ કરો" sub={`${Object.keys(data).length} વિષય`} />
             )}
             <QuickLink onClick={random} icon={<Dices className="size-[18px]" />} label="આજે શું વાંચું?" sub="એક અમૃત બિંદુ" />
             <QuickLink href={"#" + new URLSearchParams({ t: SAVED })} icon={<Heart className="size-[18px]" />} label="સાચવેલાં" sub={`${savedCount} અમૃત બિંદુ`} />
@@ -1103,18 +1157,25 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
       {topics.length > 0 && (
         <>
           <h3 className="mt-10 mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            {q ? "વિષયો" : `બધા વિષયો · ${topics.length}`}
+            {q ? "વિષયો" : "આજે વાંચવા જેવા વિષયો"}
           </h3>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
-            {topics.map((t, n) => (
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+            {(q ? topics : picks).map((t, n) => (
               <a key={t} href={"#" + new URLSearchParams({ t })} onClick={() => setQuery("")}
                 style={{ animationDelay: `${Math.min(n * 12, 240)}ms` }}
-                className="press enter flex min-h-20 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-foreground/20">
-                <span className="text-[0.9375rem] leading-snug font-medium">{t}</span>
+                className="press enter flex min-h-20 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/40">
+                <span className="text-base leading-snug font-medium">{t}</span>
                 <span className="text-xs text-muted-foreground tabular-nums">{data[t].length} પેટા વિષય</span>
               </a>
             ))}
           </div>
+          {!q && (
+            <a href={"#" + new URLSearchParams({ t: TOPICS })}
+              className="press group mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed py-3.5 text-sm font-medium text-saffron transition-colors duration-150 hover:border-saffron/50">
+              બધા {Object.keys(data).length} વિષયો જુઓ · Explore more
+              <ChevronRight className="size-4 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
+            </a>
+          )}
         </>
       )}
 
@@ -1123,7 +1184,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
 
       {!q && (
         <section className="mt-12 overflow-hidden rounded-3xl border bg-card md:grid md:grid-cols-[2fr_3fr]">
-          <img src={IMAGES.mahant.src} alt={IMAGES.mahant.alt} loading="lazy" className="h-60 w-full object-cover object-[62%_35%] md:h-full" />
+          <img src={IMAGES.mahant.src} alt={IMAGES.mahant.alt} title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" loading="lazy" className="h-60 w-full object-cover object-[62%_35%] md:h-full" />
           <div className="card-glow p-5 md:p-8">
             <p className="text-xs font-medium tracking-wide text-saffron">વચનામૃત વિશે · About</p>
             <h2 className="mt-2 font-serif text-2xl font-semibold tracking-tight">ભગવાન સ્વામિનારાયણની વાણી</h2>
@@ -1131,7 +1192,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               સંવત ૧૮૭૬ થી ૧૮૮૬ (ઈ.સ. ૧૮૧૯–૧૮૨૯) દરમિયાન ગઢડા, સારંગપુર, કારિયાણી, લોયા, પંચાળા, વરતાલ, અમદાવાદ વગેરે સ્થળે
               ભગવાન સ્વામિનારાયણે આપેલા ૨૭૩ ઉપદેશો એટલે વચનામૃત. અહીં તેમાંથી {unique.length} અમૃત બિંદુ {Object.keys(data).length} વિષયોમાં ગોઠવેલાં છે.
             </p>
-            <a href={"#" + new URLSearchParams({ t: Object.keys(data)[0] })}
+            <a href={"#" + new URLSearchParams({ t: TOPICS })}
               className="press mt-5 inline-flex items-center gap-1 rounded-full bg-saffron px-4 py-2 text-sm font-medium text-white">
               વાંચવાનું શરૂ કરો <ChevronRight className="size-4" />
             </a>
@@ -1141,14 +1202,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               </Button>
             </div>
             <FeedbackSheet open={feedback} onOpenChange={setFeedback} />
-            <p className="mt-4 text-[0.6875rem] leading-relaxed text-muted-foreground">
-              ચિત્રો · Images:{" "}
-              {Object.values(IMAGES).map((im, k) => (
-                <Fragment key={im.src}>{k > 0 && " · "}<a href={im.credit} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">{im.alt}</a></Fragment>
-              ))}
-              {" "}— © BAPS Swaminarayan Sanstha, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">CC BY-SA 4.0</a>, via Wikimedia Commons.
-              {" "}Quotes: <a href="https://www.anirdesh.com/vachanamrut/vach-quotes.php" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">anirdesh.com</a>.
-            </p>
+
           </div>
         </section>
       )}
@@ -1183,13 +1237,112 @@ function SearchInput({ value, onChange, placeholder, className }: { value: strin
   )
 }
 
+/** Topics grouped by theme — students look for "something on anger", not for an alphabetical position. */
+const TOPIC_GROUPS: [string, string[]][] = [
+  ["ભગવાન", ["ભગવાનનું સ્વરૂપ તથા મહિમા", "ભગવાનનો નિશ્ચય", "ભગવાનનો આશ્રય", "ભગવાનની કૃપા", "ભગવાનનો રાજીપો",
+    "ભગવાનનો સંબંધ તથા નિવાસ", "ભગવાનનાં ચરિત્ર", "ભગવાનનો દ્રોહ", "પ્રગટ ભગવાન અને પ્રગટ સંત", "ઉપાસના",
+    "ઉપાસના - અવતારના અવતારી, સર્વોપરી (સ્વરૂપનિષ્ઠા)", "ઉપાસના - સાકાર નિષ્ઠા"]],
+  ["ભક્તિ અને સાધના", ["ભક્તિ", "ભગવાનમાં પ્રીતિ", "ભગવાનનું ધ્યાન", "ભગવાનના સ્વરૂપમાં વૃત્તિ", "સેવા", "આત્મનિષ્ઠા",
+    "આત્મનિષ્ઠા ને ભગવાનનું માહાત્મ્ય", "આત્મનિષ્ઠા ને વૈરાગ્ય", "વૈરાગ્ય", "સ્વધર્મ", "સ્વધર્મ - આજ્ઞા", "સ્વધર્મ - નિયમ",
+    "સ્વધર્મ - નિષ્કામ", "પુરૂષ પ્રયત્ન", "એકાંતિક ભક્ત", "પૂર્ણકામપણું"]],
+  ["સંત અને સત્સંગ", ["સંત સમાગમ", "સંતનો મહિમા", "મોટા પુરુષ", "સત્સંગ", "સત્સંગી", "ભક્તનો મહિમા", "ભગવાનનો ભક્ત",
+    "પક્ષ", "ગુણ ગ્રહણ", "ત્યાગી (સાધુ)", "ગૃહસ્થ"]],
+  ["દોષો અને ઉપાય", ["ક્રોધ", "માન", "ઈર્ષ્યા", "મત્સર", "લોભ", "મોહ", "કામ", "કામાદિક દોષો", "વાસના", "કપટ", "દંભ",
+    "અવગુણ ગ્રહણ", "દ્રોહ", "કુસંગ", "સ્ત્રી પ્રસંગ", "માયિક પંચવિષય", "ઘાટ - સંકલ્પ", "સ્વભાવ (પ્રકૃતિ)", "દેહ અને દેહનાં સંબંધી"]],
+  ["જીવન અને જ્ઞાન", ["કલ્યાણ", "આત્યંતિક કલ્યાણ (મોક્ષ)", "કર્મ (ને તેનું ફળ)", "પ્રારબ્ધ (પૂર્વસંસ્કાર)",
+    "દેશકાળાદિક આઠ", "શાસ્ત્ર", "વિધિનિષેધ"]],
+]
+
+/**
+ * Topics tab: themes as a sliding tab bar (idea: transitions.dev "Tabs sliding") over pill groups.
+ * Tapping a tab scrolls to its group; scrolling moves the saffron pill. A topic pill opens that topic with all subtopics.
+ */
+function TopicsPage({ data }: { data: Data }) {
+  const [q, setQ] = useState("")
+  const [active, setActive] = useState(0)
+  const query = q.trim()
+  const placed = new Set(TOPIC_GROUPS.flatMap(([, ts]) => ts))
+  const others = Object.keys(data).filter((t) => !placed.has(t)) // safety net if the data gains a topic
+  const groups = [...TOPIC_GROUPS, ...(others.length ? [["અન્ય", others] as [string, string[]]] : [])]
+    .map(([name, ts]) => [name, ts.filter((t) => t in data && (!query || matches(t, query)))] as const)
+    .filter(([, ts]) => ts.length)
+  const tabs = useRef<(HTMLButtonElement | null)[]>([])
+
+  // Scroll-spy: the active theme is the last section whose heading has passed under the sticky header.
+  useEffect(() => {
+    const main = document.querySelector("main")!
+    const update = () => {
+      const secs = Array.from(document.querySelectorAll<HTMLElement>("section[data-g]"))
+      let g = 0
+      for (const el of secs) if (el.getBoundingClientRect().top < 220) g = Number(el.dataset.g)
+      // the last group is short and can never reach the top — at the very bottom, it's the one being read
+      if (main.scrollTop + main.clientHeight >= main.scrollHeight - 8) g = secs.length - 1
+      setActive(g)
+    }
+    update()
+    main.addEventListener("scroll", update, { passive: true })
+    return () => main.removeEventListener("scroll", update)
+  }, [query])
+  // braces matter: newer browsers return a Promise from scrollIntoView, and React would take it for a cleanup function
+  useEffect(() => {
+    tabs.current[active]?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" })
+  }, [active])
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 pb-10 md:px-10 md:pb-12">
+      <div className="glow-header sticky top-0 z-10 -mx-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-2 md:-mx-10 md:px-10 md:pt-8">
+        <div className="flex min-h-12 items-center justify-between">
+          <h1 className="text-base font-semibold tracking-tight md:font-serif md:text-3xl">બધા વિષયો</h1>
+          <div className="md:hidden"><HeaderButtons /></div>
+        </div>
+        <div className="relative mt-1 md:mt-4 md:max-w-md">
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <SearchInput value={q} onChange={setQ} placeholder="વિષય શોધો… / English" className="h-11 rounded-xl pl-9" />
+        </div>
+        {/* theme tabs — the saffron pill slides between them */}
+        <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0" role="tablist">
+          {groups.map(([name], g) => (
+            <button key={name} ref={(el) => void (tabs.current[g] = el)} role="tab" aria-selected={g === active}
+              onClick={() => (setActive(g), document.getElementById(`g${g}`)?.scrollIntoView({ behavior: "smooth", block: "start" }))}
+              className={cn("press relative shrink-0 rounded-full px-3.5 py-2 text-sm whitespace-nowrap transition-colors duration-150",
+                g === active ? "font-medium text-foreground" : "text-muted-foreground")}>
+              {g === active && <motion.span layoutId="topic-tab" className="absolute inset-0 rounded-full bg-saffron-soft" transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }} />}
+              <span className="relative">{name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {groups.map(([name, ts], g) => (
+        <section key={name} id={`g${g}`} data-g={g} className="scroll-mt-48 pt-5">
+          <h2 className="mb-3 flex items-baseline gap-2 text-sm font-semibold">
+            {name} <span className="text-xs font-normal text-muted-foreground tabular-nums">{ts.length}</span>
+          </h2>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+            {ts.map((t) => (
+              <a key={t} href={"#" + new URLSearchParams({ t })}
+                className="press flex min-h-24 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/50 hover:bg-saffron-soft">
+                <span className="text-sm leading-snug font-medium">{t}</span>
+                <span className="text-xs leading-relaxed text-muted-foreground tabular-nums">
+                  {data[t].length} પેટા વિષય<br />{total(data[t])} અમૃત બિંદુ
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+      ))}
+      {!groups.length && <p className="py-16 text-center text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}
+    </div>
+  )
+}
+
 function QuickLink({ href, onClick, icon, label, sub }: { href?: string; onClick?: () => void; icon: React.ReactNode; label: string; sub: string }) {
-  const cls = "press flex flex-col items-start gap-2 rounded-2xl border bg-card p-3 text-left transition-colors duration-150 hover:border-foreground/20 md:flex-row md:items-center md:gap-3 md:p-4"
+  const cls = "press flex min-w-0 flex-col items-start gap-2 overflow-hidden rounded-2xl border bg-card p-3 text-left transition-colors duration-150 hover:border-foreground/20 md:flex-row md:items-center md:gap-3 md:p-4"
   const body = (
     <>
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">{icon}</span>
-      <span className="min-w-0">
-        <span className="block text-[0.9375rem] leading-snug font-semibold">{label}</span>
+      <span className="w-full min-w-0">
+        <span className="block text-base leading-snug font-semibold">{label}</span>
         <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">{sub}</span>
       </span>
     </>
@@ -1424,7 +1577,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
 
       <motion.div
         key={jump.key}
-        initial={jump.key && !reduce && !jump.shuffle ? enterFrom : false}
+        initial={jump.key && !reduce ? enterFrom : false}
         animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
         transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
         className="relative mx-5 mt-4 mb-7 min-h-0 flex-1"
@@ -1472,19 +1625,6 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
             )
           })
           .reverse()}
-
-        {/* shuffle riffle: two blank cards split apart and snap back together, then the random card shows */}
-        {jump.shuffle && !reduce &&
-          [0, -1, 1].map((side) => (
-            <motion.div
-              key={side}
-              aria-hidden
-              className="pointer-events-none absolute inset-0 z-10 rounded-3xl border border-saffron/40 bg-card shadow-[0_8px_24px_-8px_rgba(0,0,0,0.25)]"
-              initial={{ opacity: 1 }}
-              animate={{ x: [0, side * 90, 0], rotate: [0, side * 9, 0], opacity: [1, 1, 0] }}
-              transition={{ duration: 0.55, times: [0, 0.45, 1], ease: [0.23, 1, 0.32, 1] }}
-            />
-          ))}
 
         {/* double-tap heart */}
         {burst > 0 && (
@@ -1593,7 +1733,7 @@ function JumpSheet({ items, current, onJump, onReorder }: { items: Item[]; curre
               className={cn("press my-0.5 flex w-full items-baseline gap-3 rounded-xl px-3 py-3 text-left", k === current && "bg-muted")}
             >
               <span className="w-7 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{k + 1}</span>
-              <span className="line-clamp-2 font-serif text-[0.9375rem] leading-relaxed">{it.quote.text}</span>
+              <span className="line-clamp-2 font-serif text-base leading-relaxed">{it.quote.text}</span>
             </button>
           </div>
         ))}
@@ -1611,7 +1751,7 @@ function ReorderRow({ item, n, current, onJump }: { item: Item; n: number; curre
       className={cn("relative my-0.5 flex items-center gap-1 rounded-xl bg-popover", current && "bg-muted")}>
       <button onClick={onJump} className="press flex min-w-0 flex-1 items-baseline gap-3 px-3 py-3 text-left">
         <span className="w-7 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{n + 1}</span>
-        <span className="line-clamp-2 font-serif text-[0.9375rem] leading-relaxed">{item.quote.text}</span>
+        <span className="line-clamp-2 font-serif text-base leading-relaxed">{item.quote.text}</span>
       </button>
       <span onPointerDown={(e) => controls.start(e)} aria-label="ખેંચીને ક્રમ બદલો" className="grid size-11 shrink-0 cursor-grab touch-none place-items-center text-muted-foreground active:cursor-grabbing">
         <GripVertical className="size-4" />
