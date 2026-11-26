@@ -410,7 +410,7 @@ function ComboPicker({ label, items, value, onChange, count }: PickerProps) {
   )
 }
 
-function SheetPicker({ label, items, value, onChange, count }: PickerProps) {
+function SheetPicker({ label, items, value, onChange, count, asTitle }: PickerProps & { asTitle?: boolean }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState("")
   const selected = useRef<HTMLButtonElement>(null)
@@ -423,11 +423,18 @@ function SheetPicker({ label, items, value, onChange, count }: PickerProps) {
   return (
     <div className="min-w-0 flex-1">
       <Drawer open={open} onOpenChange={(o) => (setOpen(o), o || setQ(""))} showSwipeHandle>
-        <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 px-3 font-normal" />}>
-          <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
-          <span className="min-w-0 flex-1 truncate text-left">{value}</span>
-          <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-        </DrawerTrigger>
+        {asTitle ? (
+          <DrawerTrigger aria-label={label} className="press flex h-11 max-w-full min-w-0 items-center gap-1 text-left">
+            <span className="truncate text-base font-semibold tracking-tight">{value.split(" · ")[0]}</span>
+            <ChevronDown className="size-4 shrink-0 text-saffron" />
+          </DrawerTrigger>
+        ) : (
+          <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 px-3 font-normal" />}>
+            <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{value}</span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          </DrawerTrigger>
+        )}
         <DrawerContent initialFocus={false} className="h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
           <DrawerHeader className="text-left">
             <DrawerTitle>{label}</DrawerTitle>
@@ -505,18 +512,19 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
 
   const bar = (
     <div className="glow-header sticky top-0 z-10 pt-[env(safe-area-inset-top,0px)]">
-      <div className="flex min-h-12 items-center justify-between pt-1.5 pr-2 pl-4 md:hidden">
-        <p className="text-base font-semibold tracking-tight">વચનામૃત અમૃત બિંદુ</p>
-        <div className="flex items-center">{pdfButton}<HeaderButtons /></div>
+      <div className="flex min-h-12 items-center justify-between gap-2 pt-1.5 pr-2 pl-4">
+        {title === TODAY ? (
+          <p className="truncate text-base font-semibold tracking-tight">
+            આજનાં વચનામૃત <span className="font-normal text-muted-foreground">· {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}</span>
+          </p>
+        ) : (
+          <SheetPicker asTitle label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
+        )}
+        <div className="flex shrink-0 items-center">{pdfButton}<HeaderButtons /></div>
       </div>
-      {title === TODAY ? (
-        <p className="px-4 pt-1 pb-3 text-sm text-muted-foreground md:hidden">
-          <span className="font-medium text-foreground">આજનાં વચનામૃત</span> · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
-        </p>
-      ) : (
-      <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 pt-1 pb-3 md:flex-row md:gap-3 md:px-10 md:pt-3">
-        <Picker label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
-        <Picker
+      {title !== TODAY && sections.length > 1 && (
+      <div className="px-4 pt-1 pb-3">
+        <SheetPicker
           label={title === SAVED ? "યાદી" : "પેટા વિષય"}
           items={[ALL, ...sections.map((s) => s.name)]}
           value={sub ?? ALL}
