@@ -12,9 +12,8 @@ function store<T>(event: string, read: () => T) {
   }
 }
 
-// ── Theme: saved choice, else the OS setting ─────────────────────────────
-const osDark = matchMedia("(prefers-color-scheme: dark)")
-const isDark = () => (localStorage.getItem("theme") ?? (osDark.matches ? "dark" : "light")) === "dark"
+// ── Theme: saved choice, else dark ─────────────────────────────
+const isDark = () => (localStorage.getItem("theme") ?? "dark") === "dark" // dark by default; a chosen theme is remembered
 const theme = store("themechange", isDark)
 function applyTheme() {
   const d = isDark()
@@ -23,7 +22,6 @@ function applyTheme() {
   theme.emit()
 }
 applyTheme()
-osDark.addEventListener("change", applyTheme)
 export const useDark = theme.use
 /**
  * Switch theme in one clean step: per-element colour transitions are paused for the instant of the swap

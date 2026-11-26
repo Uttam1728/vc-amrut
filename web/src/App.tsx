@@ -1018,6 +1018,7 @@ function FeedbackSheet({ open, onOpenChange, item }: { open: boolean; onOpenChan
 /** Add a quote to the student's own lists (like playlists) — or start a new one right here. */
 function ListMenu({ item }: { item: Item }) {
   const lists = useLists()
+  const [confirming, setConfirming] = useState<string | null>(null)
   const [name, setName] = useState("")
   const inAny = lists.some((l) => inList(l, item))
   const add = (e: React.FormEvent) => {
@@ -1029,7 +1030,7 @@ function ListMenu({ item }: { item: Item }) {
     setName("")
   }
   return (
-    <Popover>
+    <Popover onOpenChange={(o) => o || setConfirming(null)}>
       <PopoverTrigger render={<Button variant="ghost" size="icon" className={cn("press size-10", inAny ? "text-foreground" : "text-muted-foreground")} aria-label="યાદીમાં ઉમેરો" data-tip="યાદીમાં ઉમેરો · Add to list" />}>
         {inAny ? <ListChecks className="size-[18px]" /> : <ListPlus className="size-[18px]" />}
       </PopoverTrigger>
@@ -1038,6 +1039,16 @@ function ListMenu({ item }: { item: Item }) {
         <div className="max-h-56 overflow-y-auto">
           {lists.map((l) => {
             const on = inList(l, item)
+            // Deleting asks inside the menu (not the browser's own pop-up): the row turns into "delete? no / yes".
+            if (confirming === l.name)
+              return (
+                <div key={l.name} className="flex items-center gap-1.5 rounded-md bg-muted/70 py-1 pr-1 pl-2">
+                  <span className="min-w-0 flex-1 truncate text-sm">“{l.name}” કાઢી નાખવી?</span>
+                  <Button variant="ghost" className="press h-8 px-2.5 text-sm" onClick={() => setConfirming(null)}>ના</Button>
+                  <Button className="press h-8 bg-saffron px-3 text-sm text-white hover:bg-saffron/90"
+                    onClick={() => (deleteList(l.name), setConfirming(null))}>કાઢો</Button>
+                </div>
+              )
             return (
               <div key={l.name} className="group flex items-center">
                 <button className={cn(menuRow, "flex-1")} onClick={() => toggleInList(l.name, item)} aria-pressed={on}>
@@ -1048,7 +1059,7 @@ function ListMenu({ item }: { item: Item }) {
                   <span className="text-xs text-muted-foreground tabular-nums">{l.items.length}</span>
                 </button>
                 <Button variant="ghost" size="icon" className="press size-8 text-muted-foreground" aria-label={`“${l.name}” યાદી કાઢી નાખો`}
-                  onClick={() => confirm(`“${l.name}” યાદી કાઢી નાખવી છે?`) && deleteList(l.name)}>
+                  onClick={() => setConfirming(l.name)}>
                   <Trash2 className="size-3.5" />
                 </Button>
               </div>
