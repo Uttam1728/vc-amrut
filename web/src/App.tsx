@@ -210,9 +210,8 @@ export default function App() {
             {q && visibleTopics.length === 0 && <p className="px-2.5 py-6 text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}
           </nav>
         </ScrollArea>
-        <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
-          <span>Made by Ushank Radadiya</span>
-          <button className="press hover:text-foreground" onClick={() => setSideFeedback(true)}>સૂચન મોકલો</button>
+        <div className="border-t px-5 py-3 text-xs text-muted-foreground">
+          <button className="press hover:text-foreground" onClick={() => setSideFeedback(true)}>સૂચન / ભૂલ જણાવો</button>
           <FeedbackSheet open={sideFeedback} onOpenChange={setSideFeedback} />
         </div>
       </aside>
@@ -501,15 +500,15 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
       })),
     })
   const pdfButton = !empty && (
-    <Button variant="ghost" size="icon" className="press size-9 text-muted-foreground" onClick={exportPdf}
-      aria-label="PDF બનાવો · Save as PDF" data-tip="PDF બનાવો">
-      <FileDown className="size-[18px]" />
+    <Button variant="outline" className="press mr-1 h-9 gap-1.5 rounded-full px-3.5 text-sm" onClick={exportPdf}
+      aria-label="PDF બનાવો · Save as PDF">
+      <FileDown className="size-4" /> PDF
     </Button>
   )
 
   const bar = (
     <div className="glow-header sticky top-0 z-10 pt-[env(safe-area-inset-top,0px)]">
-      <div className="flex items-center justify-between pt-1.5 pr-2 pl-4 md:hidden">
+      <div className="flex min-h-12 items-center justify-between pt-1.5 pr-2 pl-4 md:hidden">
         <p className="text-sm font-semibold tracking-tight">વચનામૃત અમૃત બિંદુ</p>
         <div className="flex items-center">{pdfButton}<HeaderButtons /></div>
       </div>
@@ -1136,11 +1135,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               className="press mt-5 inline-flex items-center gap-1 rounded-full bg-saffron px-4 py-2 text-sm font-medium text-white">
               વાંચવાનું શરૂ કરો <ChevronRight className="size-4" />
             </a>
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-              <p className="text-sm">
-                <span className="text-muted-foreground">બનાવનાર · Made by </span>
-                <span className="font-medium">Ushank Radadiya</span>
-              </p>
+            <div className="mt-6 border-t pt-4">
               <Button variant="outline" className="press rounded-full" onClick={() => setFeedback(true)}>
                 <MessageSquareWarning className="size-4" /> સૂચન / ભૂલ જણાવો
               </Button>
