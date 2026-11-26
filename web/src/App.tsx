@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyn
 import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform } from "motion/react"
 import {
   ALargeSmall, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy,
-  Dices, GripVertical, Heart, History, House, ImageIcon, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
+  Dices, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
   Shuffle, Sun, Trash2, X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList, ComboboxTrigger } from "@/components/ui/combobox"
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -93,6 +94,7 @@ export default function App() {
   const route = useRoute()
   const saved = useSaved()
   const lists = useLists()
+  const [sideFeedback, setSideFeedback] = useState(false)
 
   useEffect(() => {
     Promise.all([fetch("/subtopics.json").then((r) => r.json()), fetch("/vach.json").then((r) => r.json())]).then(([d, t]: [Data, Record<string, string>]) => {
@@ -207,6 +209,11 @@ export default function App() {
             {q && visibleTopics.length === 0 && <p className="px-2.5 py-6 text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}
           </nav>
         </ScrollArea>
+        <div className="flex items-center justify-between border-t px-5 py-3 text-xs text-muted-foreground">
+          <span>Made by Ushank Radadiya</span>
+          <button className="press hover:text-foreground" onClick={() => setSideFeedback(true)}>સૂચન મોકલો</button>
+          <FeedbackSheet open={sideFeedback} onOpenChange={setSideFeedback} />
+        </div>
       </aside>
 
       {/* Main */}
@@ -704,6 +711,7 @@ function QuoteCard({ id, item, url, flash, where, q }: { id?: string; item: Item
 }
 
 function QuoteActions({ item, url }: { item: Item; url: string }) {
+  const [report, setReport] = useState(false)
   const saved = useSaved()
   const on = saved.some((s) => quoteKey(s.quote) === quoteKey(item.quote))
   return (
@@ -721,7 +729,8 @@ function QuoteActions({ item, url }: { item: Item; url: string }) {
         </motion.span>
       </Button>
       <ListMenu item={item} />
-      <ShareMenu item={item} url={url} />
+      <ShareMenu item={item} url={url} onReport={() => setReport(true)} />
+      <FeedbackSheet open={report} onOpenChange={setReport} item={item} />
       <span className="flex-1" />
       <Badge
         variant="outline"
@@ -762,7 +771,7 @@ const canShareFiles = (() => {
  * Phones: the share sheet with the picture attached (WhatsApp/Telegram/X links can't carry images).
  * Desktop: picture copied to the clipboard, and the app opens with the note filled in — paste with ⌘V / Ctrl+V.
  */
-function ShareMenu({ item, url }: { item: Item; url: string }) {
+function ShareMenu({ item, url, onReport }: { item: Item; url: string; onReport: () => void }) {
   const [open, setOpen] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   useEffect(() => {
@@ -837,9 +846,88 @@ function ShareMenu({ item, url }: { item: Item; url: string }) {
           <span className="grid size-7 place-items-center rounded-full bg-muted"><ImageIcon className="size-3.5" /></span>
           ડાઉનલોડ · Download
         </button>
+        <div className="my-1 border-t" />
+        <button className={menuRow} onClick={() => (setOpen(false), onReport())}>
+          <span className="grid size-7 place-items-center rounded-full bg-muted"><MessageSquareWarning className="size-3.5" /></span>
+          ભૂલ જણાવો · Report
+        </button>
         <p aria-live="polite" className={cn("px-2 pt-1 text-xs text-emerald-700 transition-opacity duration-150 dark:text-emerald-400", !done && "h-0 opacity-0")}>{done}</p>
       </PopoverContent>
     </Popover>
+  )
+}
+
+const KINDS = [["mistake", "ભૂલ"], ["suggestion", "સૂચન"], ["other", "અન્ય"]] as const
+
+/**
+ * Feedback form in a bottom sheet → POST /api/feedback (Cloudflare Pages Function) → D1 table `feedback`.
+ * Opened from a card it carries that amrut bindu, so a reported mistake points straight at the quote.
+ */
+function FeedbackSheet({ open, onOpenChange, item }: { open: boolean; onOpenChange: (o: boolean) => void; item?: Item }) {
+  const [kind, setKind] = useState<string>(item ? "mistake" : "suggestion")
+  const [message, setMessage] = useState("")
+  const [name, setName] = useState("")
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const quote = item && `${item.quote.vach} · ${item.topic} › ${item.sub} · “${item.quote.text.slice(0, 80)}…”`
+  useEffect(() => {
+    if (open) setState("idle")
+  }, [open])
+
+  const send = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    setState("sending")
+    const website = (e.currentTarget.elements.namedItem("website") as HTMLInputElement).value
+    try {
+      const r = await fetch("/api/feedback", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind, message, name, quote, page: location.href, website }),
+      })
+      if (!r.ok) throw new Error(String(r.status))
+      setState("sent")
+      setMessage("")
+      setTimeout(() => onOpenChange(false), 1600)
+    } catch {
+      setState("error")
+    }
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} showSwipeHandle>
+      <DrawerContent className="pb-[env(safe-area-inset-bottom,0px)] md:mx-auto md:max-w-lg">
+        <DrawerHeader className="text-left">
+          <DrawerTitle>{item ? "ભૂલ કે સૂચન જણાવો" : "સૂચન / ભૂલ જણાવો · Feedback"}</DrawerTitle>
+        </DrawerHeader>
+        {state === "sent" ? (
+          <div className="grid place-items-center gap-3 px-4 pt-6 pb-12 text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-saffron-soft text-saffron"><DrawnCheck on className="size-7" /></span>
+            <p className="text-lg font-semibold">આભાર! 🙏</p>
+            <p className="text-sm text-muted-foreground">તમારો સંદેશો મળી ગયો છે.</p>
+          </div>
+        ) : (
+          <form onSubmit={send} className="space-y-4 px-4 pt-2 pb-6">
+            {quote && <p className="rounded-xl bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">{quote}</p>}
+            <div className="flex gap-2" role="radiogroup" aria-label="પ્રકાર">
+              {KINDS.map(([k, label]) => (
+                <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => setKind(k)}
+                  className={cn("press rounded-full border px-4 py-1.5 text-sm transition-colors duration-150",
+                    kind === k ? "border-saffron bg-saffron-soft font-medium text-foreground" : "text-muted-foreground")}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Textarea value={message} onChange={(e) => setMessage(e.target.value)} required minLength={3} maxLength={2000} rows={4}
+              placeholder={kind === "mistake" ? "શું ખોટું લાગે છે? (દા.ત. વચનામૃતનો નંબર, શબ્દ…)" : "તમારો સંદેશો લખો…"} className="text-base" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="તમારું નામ (મરજિયાત)" className="h-11" />
+            {/* honeypot — hidden from people, bots fill it */}
+            <input name="website" tabIndex={-1} autoComplete="off" aria-hidden className="hidden" />
+            {state === "error" && <p className="text-sm text-destructive">મોકલી ન શકાયું — ઇન્ટરનેટ તપાસીને ફરી પ્રયાસ કરો.</p>}
+            <Button type="submit" disabled={state === "sending" || message.trim().length < 3} className="press h-11 w-full rounded-xl bg-saffron text-white hover:bg-saffron/90">
+              {state === "sending" ? "મોકલાય છે…" : "મોકલો · Send"}
+            </Button>
+          </form>
+        )}
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -914,6 +1002,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
   const q = query.trim()
   const topics = Object.keys(data).filter((t) => !q || matches(t, q) || results.some((r) => r.topic === t))
   const today = unique.length ? todays(unique)[0] : null
+  const [feedback, setFeedback] = useState(false)
   const last = new URLSearchParams(localStorage.getItem("last") ?? "")
   const lastTopic = last.get("t")
   const random = () => {
@@ -1016,7 +1105,17 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               className="press mt-5 inline-flex items-center gap-1 rounded-full bg-saffron px-4 py-2 text-sm font-medium text-white">
               વાંચવાનું શરૂ કરો <ChevronRight className="size-4" />
             </a>
-            <p className="mt-6 text-[0.6875rem] leading-relaxed text-muted-foreground">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+              <p className="text-sm">
+                <span className="text-muted-foreground">બનાવનાર · Made by </span>
+                <span className="font-medium">Ushank Radadiya</span>
+              </p>
+              <Button variant="outline" className="press rounded-full" onClick={() => setFeedback(true)}>
+                <MessageSquareWarning className="size-4" /> સૂચન / ભૂલ જણાવો
+              </Button>
+            </div>
+            <FeedbackSheet open={feedback} onOpenChange={setFeedback} />
+            <p className="mt-4 text-[0.6875rem] leading-relaxed text-muted-foreground">
               ચિત્રો · Images:{" "}
               {Object.values(IMAGES).map((im, k) => (
                 <Fragment key={im.src}>{k > 0 && " · "}<a href={im.credit} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">{im.alt}</a></Fragment>

@@ -1,0 +1,9 @@
+# Cloudflare Pages config (static site in dist/ + the feedback function in functions/).
+name = "vachanamrut-amrutbindu"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vachanamrut-feedback"
+database_id = "0f52a94a-90ab-47da-a32e-103380bbf187"
