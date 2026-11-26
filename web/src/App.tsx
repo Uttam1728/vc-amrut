@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform } from "motion/react"
 import {
-  ALargeSmall, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy,
+  Settings2, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy,
   Dices, FileDown, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
   Shuffle, Sun, Trash2, X,
 } from "lucide-react"
@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { matches, translit } from "@/lib/translit"
+import { matches } from "@/lib/translit"
 import { quoteCard } from "@/lib/shareCard"
 import { printPdf } from "@/lib/print"
 import {
@@ -30,7 +30,7 @@ type Section = { name: string; items?: Item[] }
 
 const HOME = "હોમ · Home"
 const TOPICS = "વિષયો · Topics" // tab only: the last topic you read
-const TODAY = "આજનાં વચનામૃત · Today"
+const TODAY = "આજનાં અમૃત બિંદુ · Today"
 const TODAY_COUNT = 5
 
 /** Today's quotes: the same five for everyone on a given day, spread across the whole collection. */
@@ -43,7 +43,7 @@ function todays(all: Item[]) {
 }
 const FAV = "♥ પસંદગી · Favorites"
 const SAVED = "સાચવેલાં · Saved"
-const ALL = "બધા પેટા વિષયો · All subtopics"
+const ALL = "બધા"
 
 // "ગ. મ. ૬૫" → "ગઢડા મધ્ય ૬૫" — the short codes the source uses, spelled out for students.
 const PLACES: Record<string, string> = {
@@ -187,7 +187,7 @@ export default function App() {
             {!q && (
               <>
                 <SideLink t={HOME} current={current} icon={<House className="size-4" />} label="હોમ" />
-                <SideLink t={TODAY} current={current} icon={<CalendarDays className="size-4" />} label="આજનાં વચનામૃત" count={TODAY_COUNT} />
+                <SideLink t={TODAY} current={current} icon={<CalendarDays className="size-4" />} label="આજનાં અમૃત બિંદુ" count={TODAY_COUNT} />
                 <SideLink t={SAVED} current={current} icon={<Heart className="size-4" />} label="સાચવેલાં" count={savedCount} />
                 {/* your lists, right under Saved (Favorites first) */}
                 {[...(saved.length ? [{ name: FAV, n: saved.length }] : []), ...lists.map((l) => ({ name: l.name, n: l.items.length }))].map((l) => {
@@ -236,7 +236,7 @@ export default function App() {
           />
         )}
       </main>
-      <TabBar current={current} savedCount={savedCount} />
+      <TabBar current={current} />
     </div>
   )
 }
@@ -263,7 +263,7 @@ function LoadingSkeleton() {
 }
 
 /** Phone navigation lives at the bottom, in thumb reach. Topics count as "Home" — that's where you pick them. */
-function TabBar({ current, savedCount }: { current: string; savedCount: number }) {
+function TabBar({ current }: { current: string }) {
   // Each tab is highlighted only where it leads: Home = the home page, Topics = any topic you're reading.
   const active = current === HOME || current === TODAY || current === SAVED ? current : TOPICS
   const tabs = [
@@ -287,21 +287,6 @@ function TabBar({ current, savedCount }: { current: string; savedCount: number }
             {on && <motion.span layoutId="tab" className="absolute inset-0 rounded-[1.4rem] bg-saffron-soft" transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }} />}
             <Icon className={cn("relative size-[22px]", on && "text-saffron", on && t === SAVED && "fill-current")} strokeWidth={on ? 2.2 : 1.8} />
             <span className="relative">{label}</span>
-            <AnimatePresence>
-            {t === SAVED && savedCount > 0 && (
-              // springs in each time the count changes (idea: transitions.dev "Notification badge")
-              <motion.span
-                key={savedCount}
-                initial={{ scale: 0.6, x: -3, y: 3, opacity: 0 }}
-                animate={{ scale: 1, x: 0, y: 0, opacity: 1 }}
-                exit={{ scale: 0.6, opacity: 0, transition: { duration: 0.15 } }}
-                transition={{ type: "spring", duration: 0.25, bounce: 0.4 }}
-                className="absolute top-1.5 left-1/2 ml-2 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[0.625rem] leading-4 font-semibold text-white tabular-nums"
-              >
-                {savedCount}
-              </motion.span>
-            )}
-            </AnimatePresence>
           </a>
         )
       })}
@@ -333,17 +318,18 @@ function SideLink({ t, current, label, count, icon, onClick }: {
   )
 }
 
+/** One settings button (text size + theme) — keeps phone headers free for the title. */
 function HeaderButtons() {
   const dark = useDark()
   const size = useTextSize()
   return (
-    <div className="flex items-center">
-      <Popover>
-        <PopoverTrigger render={<Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" aria-label="અક્ષરનું કદ · Text size" data-tip="અક્ષરનું કદ" />}>
-          <ALargeSmall className="size-[18px]" />
-        </PopoverTrigger>
-        <PopoverContent align="end" initialFocus={false} className="w-auto gap-2 p-2">
-          <p className="px-1 text-xs text-muted-foreground">અક્ષરનું કદ · Text size</p>
+    <Popover>
+      <PopoverTrigger render={<Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" aria-label="સેટિંગ્સ · Settings" data-tip="અક્ષર · થીમ" />}>
+        <Settings2 className="size-[18px]" />
+      </PopoverTrigger>
+      <PopoverContent align="end" initialFocus={false} className="w-auto gap-3 p-3">
+        <div>
+          <p className="mb-1.5 px-0.5 text-xs text-muted-foreground">અક્ષરનું કદ · Text size</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" className="press h-11 w-14 gap-0.5" disabled={size === 0} onClick={() => setTextSize(size - 1)} aria-label="નાના અક્ષર · Smaller">
               <span className="text-sm">A</span><Minus className="size-3.5" />
@@ -357,13 +343,21 @@ function HeaderButtons() {
               <span className="text-lg">A</span><Plus className="size-3.5" />
             </Button>
           </div>
-        </PopoverContent>
-      </Popover>
-      <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" onClick={toggleTheme}
-        aria-label={dark ? "લાઇટ થીમ" : "ડાર્ક થીમ"} title={dark ? "Light theme" : "Dark theme"}>
-        {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      </Button>
-    </div>
+        </div>
+        <div className="border-t pt-3">
+          <p className="mb-1.5 px-0.5 text-xs text-muted-foreground">થીમ · Theme</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[[false, "લાઇટ", Sun], [true, "ડાર્ક", Moon]].map(([d, label, Icon]) => (
+              <Button key={String(d)} variant="outline" aria-pressed={dark === d} onClick={() => dark !== d && toggleTheme()}
+                className={cn("press h-10 gap-1.5", dark === d && "border-saffron bg-saffron-soft")}>
+                {/* @ts-expect-error tuple element is a component */}
+                <Icon className="size-4" /> {label as string}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -376,11 +370,10 @@ function Picker(props: PickerProps) {
 }
 
 function ItemLabel({ item }: { item: string }) {
-  const special = item === ALL || item === TODAY || item === SAVED || item === FAV
   return (
     <span className="flex min-w-0 flex-1 flex-col">
-      <span className="leading-snug">{item}</span>
-      {!special && <span className="truncate text-xs text-muted-foreground">{translit(item)}</span>}
+      {/* English search still works (matching uses the transliteration) — it just isn't printed under every row */}
+      <span className="text-base leading-snug">{item}</span>
     </span>
   )
 }
@@ -424,38 +417,38 @@ function SheetPicker({ label, items, value, onChange, count, asTitle }: PickerPr
     <div className="min-w-0 flex-1">
       <Drawer open={open} onOpenChange={(o) => (setOpen(o), o || setQ(""))} showSwipeHandle>
         {asTitle ? (
-          <DrawerTrigger aria-label={label} className="press flex h-11 max-w-full min-w-0 items-center gap-1 text-left">
-            <span className="truncate text-base font-semibold tracking-tight">{value.split(" · ")[0]}</span>
+          <DrawerTrigger aria-label={label} className="press flex h-11 max-w-full min-w-0 items-center gap-1.5 rounded-2xl border bg-muted/60 pr-3 pl-4 text-left outline-none">
+            <span className="truncate text-[0.9375rem] font-semibold tracking-tight">{value.split(" · ")[0]}</span>
             <ChevronDown className="size-4 shrink-0 text-saffron" />
           </DrawerTrigger>
         ) : (
-          <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 px-3 font-normal" />}>
+          <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 rounded-2xl bg-muted/60 pr-3 pl-4 font-normal pointer-coarse:focus-visible:border-border pointer-coarse:focus-visible:ring-0" />}>
             <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
             <span className="min-w-0 flex-1 truncate text-left">{value}</span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
           </DrawerTrigger>
         )}
-        <DrawerContent initialFocus={false} className="h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
-          <DrawerHeader className="text-left">
+        <DrawerContent initialFocus={false} finalFocus={false} className="h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
+          <DrawerHeader className="items-start px-4 text-left">
             <DrawerTitle>{label}</DrawerTitle>
           </DrawerHeader>
           <div className="px-4 pt-3 pb-2">
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="શોધો — ગુજરાતી કે English…" className="h-11 pl-9" enterKeyHint="search" />
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="શોધો — ગુજરાતી કે English…" className="h-11 pl-9 text-base" enterKeyHint="search" />
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
             {list.map((item) => (
               <button
                 key={item}
                 ref={item === value ? selected : undefined}
                 onClick={() => (onChange(item), setOpen(false), setQ(""))}
-                className={cn("press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left", item === value && "bg-muted")}
+                aria-current={item === value || undefined}
+                className={cn("press flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left", item === value && "font-medium text-saffron")}
               >
                 <ItemLabel item={item} />
                 <span className="text-xs text-muted-foreground tabular-nums">{count(item)}</span>
-                <Check className={cn("size-4 shrink-0", item !== value && "invisible")} />
               </button>
             ))}
             {list.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}
@@ -477,7 +470,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
   const ready = sections.every((s) => s.items)
   const items = shown.flatMap((s) => s.items ?? [])
   const link = (n: number) => linkTo({ t: route.t, s: sub ?? undefined, q: n + 1 })
-  const heading = title === TODAY ? "આજનાં વચનામૃત" : title === SAVED ? "સાચવેલાં" : title
+  const heading = title === TODAY ? "આજનાં અમૃત બિંદુ" : title === SAVED ? "સાચવેલાં" : title
   const meta =
     title === TODAY ? new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long", year: "numeric" })
     : `${sections.length} પેટા વિષય · ${sectionCount(sections)} અમૃત બિંદુ`
@@ -512,10 +505,10 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
 
   const bar = (
     <div className="glow-header sticky top-0 z-10 pt-[env(safe-area-inset-top,0px)]">
-      <div className="flex min-h-12 items-center justify-between gap-2 pt-1.5 pr-2 pl-4">
+      <div className="flex min-h-12 items-center justify-between gap-2 pt-1.5 pr-1 pl-4">
         {title === TODAY ? (
           <p className="truncate text-base font-semibold tracking-tight">
-            આજનાં વચનામૃત <span className="font-normal text-muted-foreground">· {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}</span>
+            આજનાં અમૃત બિંદુ <span className="font-normal text-muted-foreground">· {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}</span>
           </p>
         ) : (
           <SheetPicker asTitle label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
@@ -929,7 +922,7 @@ function ShareMenu({ item, url, onReport }: { item: Item; url: string; onReport:
         <button className={menuRow} onClick={copyImage}>
           <span className="relative grid size-7 place-items-center rounded-full bg-muted">
             <Copy className={cn("swap size-3.5", done && "swap-out")} />
-            <DrawnCheck on={!!done} className="absolute size-3.5 text-emerald-600 dark:text-emerald-400" />
+            <DrawnCheck on={!!done} className="absolute size-3.5 text-saffron" />
           </span>
           ચિત્ર કૉપિ કરો · Copy
         </button>
@@ -942,7 +935,7 @@ function ShareMenu({ item, url, onReport }: { item: Item; url: string; onReport:
           <span className="grid size-7 place-items-center rounded-full bg-muted"><MessageSquareWarning className="size-3.5" /></span>
           ભૂલ જણાવો · Report
         </button>
-        <p aria-live="polite" className={cn("px-2 pt-1 text-xs text-emerald-700 transition-opacity duration-150 dark:text-emerald-400", !done && "h-0 opacity-0")}>{done}</p>
+        <p aria-live="polite" className={cn("px-2 pt-1 text-xs text-saffron transition-opacity duration-150", !done && "h-0 opacity-0")}>{done}</p>
       </PopoverContent>
     </Popover>
   )
@@ -1079,7 +1072,7 @@ function Highlight({ text, q }: { text: string; q: string }) {
   return parts.map((p, i) => (
     <span key={i}>
       {p}
-      {i < parts.length - 1 && <mark className="rounded-sm bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-400/30">{q}</mark>}
+      {i < parts.length - 1 && <mark className="rounded-sm bg-saffron-soft px-0.5 text-inherit">{q}</mark>}
     </span>
   ))
 }
@@ -1134,7 +1127,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               className="card-glow press group relative mt-3 block overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:mt-8 md:pt-28 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.14)] transition-shadow duration-200 md:mt-0 md:p-7 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_20px_40px_-14px_rgba(0,0,0,0.2)]">
               <img src={IMAGES.manuscript.src} alt="" aria-hidden title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
               <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <CalendarDays className="size-3.5 text-saffron" /> આજનાં વચનામૃત · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
+                <CalendarDays className="size-3.5 text-saffron" /> આજનાં અમૃત બિંદુ · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
                 <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">1 / {TODAY_COUNT}</span>
               </p>
               <blockquote className="mt-3 line-clamp-5 font-serif text-(length:--qs) leading-[1.9]">
@@ -1576,7 +1569,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-1">
       {/* progress */}
-      <div className={cn("mx-5 mt-3 h-0.5 overflow-hidden rounded-full bg-muted", items.length < 2 && "invisible")}>
+      <div className={cn("mx-4 mt-3 h-0.5 overflow-hidden rounded-full bg-muted", items.length < 2 && "invisible")}>
         <div
           className="h-full origin-left bg-saffron transition-transform duration-200 ease-(--ease-out)"
           style={{ transform: `scaleX(${(i + 1) / items.length})` }}
@@ -1588,7 +1581,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
         initial={jump.key && !reduce ? enterFrom : false}
         animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
         transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-        className="relative mx-5 mt-4 mb-7 min-h-0 flex-1"
+        className="relative mx-4 mt-4 mb-7 min-h-0 flex-1"
       >
         {visible
           .map((k, depth) => {
