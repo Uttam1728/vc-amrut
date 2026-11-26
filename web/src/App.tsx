@@ -337,7 +337,7 @@ function HeaderButtons() {
   return (
     <div className="flex items-center">
       <Popover>
-        <PopoverTrigger render={<Button variant="ghost" size="icon" className="press size-9 text-muted-foreground" aria-label="અક્ષરનું કદ · Text size" data-tip="અક્ષરનું કદ" />}>
+        <PopoverTrigger render={<Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" aria-label="અક્ષરનું કદ · Text size" data-tip="અક્ષરનું કદ" />}>
           <ALargeSmall className="size-[18px]" />
         </PopoverTrigger>
         <PopoverContent align="end" initialFocus={false} className="w-auto gap-2 p-2">
@@ -357,7 +357,7 @@ function HeaderButtons() {
           </div>
         </PopoverContent>
       </Popover>
-      <Button variant="ghost" size="icon" className="press size-9 text-muted-foreground" onClick={toggleTheme}
+      <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" onClick={toggleTheme}
         aria-label={dark ? "લાઇટ થીમ" : "ડાર્ક થીમ"} title={dark ? "Light theme" : "Dark theme"}>
         {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
       </Button>
@@ -500,9 +500,9 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
       })),
     })
   const pdfButton = !empty && (
-    <Button variant="outline" className="press mr-1 h-9 gap-1.5 rounded-full px-3.5 text-sm" onClick={exportPdf}
-      aria-label="PDF બનાવો · Save as PDF">
-      <FileDown className="size-4" /> PDF
+    <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" onClick={exportPdf}
+      aria-label="PDF બનાવો · Save as PDF" data-tip="PDF બનાવો">
+      <FileDown className="size-5" />
     </Button>
   )
 
