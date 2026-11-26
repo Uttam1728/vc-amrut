@@ -2,7 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyn
 import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform } from "motion/react"
 import {
   ALargeSmall, ArrowUpRight, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Copy,
-  Dices, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
+  Dices, FileDown, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
   Shuffle, Sun, Trash2, X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { matches, translit } from "@/lib/translit"
 import { quoteCard } from "@/lib/shareCard"
+import { printPdf } from "@/lib/print"
 import {
   type Item, type Quote, type Route, createList, reorderList, reorderSaved, setTextSize, deleteList, inList, linkTo, nav, isSaved, quoteKey, shareTargets,
   shareNote, toggleInList, toggleSaved, toggleTheme, useDark, useLists, useRoute, useSaved, useTextSize,
@@ -483,11 +484,34 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
       <Empty>આ વિષયનાં અમૃત બિંદુ હજી એકઠાં થાય છે. થોડી વારમાં ફરી ખોલો.</Empty>
     ) : null
 
+  // PDF of exactly what's selected: the whole topic, one subtopic, Favorites, or one of your lists.
+  const exportPdf = () =>
+    printPdf({
+      title: heading,
+      subtitle: sub ?? (sections.length > 1 ? (title === SAVED ? "બધી યાદીઓ" : "બધા પેટા વિષયો") : undefined),
+      site: location.host,
+      sections: shown.map((s) => ({
+        name: shown.length > 1 ? s.name : undefined,
+        quotes: (s.items ?? []).map((it) => ({
+          reference: `વચનામૃત ${vachName(it.quote.vach)}`,
+          title: titles[it.quote.vachno],
+          where: title === SAVED || title === TODAY ? `${it.topic} › ${it.sub}` : undefined,
+          text: it.quote.text,
+        })),
+      })),
+    })
+  const pdfButton = !empty && (
+    <Button variant="ghost" size="icon" className="press size-9 text-muted-foreground" onClick={exportPdf}
+      aria-label="PDF બનાવો · Save as PDF" data-tip="PDF બનાવો">
+      <FileDown className="size-[18px]" />
+    </Button>
+  )
+
   const bar = (
     <div className="glow-header sticky top-0 z-10 pt-[env(safe-area-inset-top,0px)]">
       <div className="flex items-center justify-between pt-1.5 pr-2 pl-4 md:hidden">
         <p className="text-sm font-semibold tracking-tight">વચનામૃત અમૃત બિંદુ</p>
-        <HeaderButtons />
+        <div className="flex items-center">{pdfButton}<HeaderButtons /></div>
       </div>
       <div className="mx-auto flex max-w-5xl flex-col gap-2 px-4 pt-1 pb-3 md:flex-row md:gap-3 md:px-10 md:pt-3">
         <Picker label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
@@ -536,9 +560,16 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
             </a>
           )}
           <h2 className="mt-1 font-serif text-4xl leading-tight font-semibold tracking-tight">{sub ?? heading}</h2>
-          <p className="mt-3 text-sm text-muted-foreground tabular-nums">
-            {sub ? `${subLabel} ${idx + 1} / ${sections.length} · ${items.length} અમૃત બિંદુ` : meta}
-          </p>
+          <div className="mt-3 flex items-center gap-3">
+            <p className="text-sm text-muted-foreground tabular-nums">
+              {sub ? `${subLabel} ${idx + 1} / ${sections.length} · ${items.length} અમૃત બિંદુ` : meta}
+            </p>
+            {!empty && (
+              <Button variant="outline" size="sm" className="press h-8 gap-1.5 rounded-full" onClick={exportPdf}>
+                <FileDown className="size-3.5" /> PDF
+              </Button>
+            )}
+          </div>
           {sections.length > 1 && (
             <div className="mt-6 max-w-md">
               <Picker
