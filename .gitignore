@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.wrangler/
+.DS_Store
+*.log
+
+# review-only downloads (the images the app uses live in web/public/img)
+images-review/
+subject-index.raw.json
+
+# local AI-tool settings
+.agents/
+.claude/
+skills-lock.json
