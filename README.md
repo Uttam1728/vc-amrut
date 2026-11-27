@@ -18,7 +18,6 @@ web/              the app (Vite + React + Tailwind) — deployed to Cloudflare P
 data/             scraped data: topics.json, subtopics.json
 scripts/          scrape.py (quotes), vach_titles.py (titles), fetch_*images.py (image candidates)
 parked/feelings/  "how are you feeling?" mapping — paused, not used by the app
-PROJECT_NOTES.md  decisions, state and commands — read first
 ```
 
 ## Run
