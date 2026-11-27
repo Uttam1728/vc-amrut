@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { matches } from "@/lib/translit"
-import { quoteCard } from "@/lib/shareCard"
+import { quoteCard, quoteCards } from "@/lib/shareCard"
 import { printPdf } from "@/lib/print"
 import { quoteCode, createQuoteLinks } from "@/lib/quoteLinks"
 import {
@@ -230,13 +230,16 @@ export default function App() {
           </nav>
         </ScrollArea>
         <div className="border-t px-5 py-3 text-xs text-muted-foreground">
-          <button className="press hover:text-foreground" onClick={() => setSideFeedback(true)}>સૂચન / ભૂલ જણાવો</button>
+          <div className="flex items-center justify-between">
+            <ShareAppButton compact />
+            <button className="press hover:text-foreground" onClick={() => setSideFeedback(true)}>સૂચન / ભૂલ જણાવો</button>
+          </div>
           <FeedbackSheet open={sideFeedback} onOpenChange={setSideFeedback} />
         </div>
       </aside>
 
       {/* Main */}
-      <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+      <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.1rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {!data ? (
           <LoadingSkeleton />
         ) : current === TOPICS && !searching ? (
@@ -882,22 +885,27 @@ function ShareMenu({ item, url, onReport }: { item: Item; url: string; onReport:
     return () => clearTimeout(t)
   }, [done])
 
-  const card = (type: "image/jpeg" | "image/png" = "image/jpeg") => quoteCard({
+  const opts = (type: "image/jpeg" | "image/png" = "image/jpeg") => ({
     text: item.quote.text, reference: `વચનામૃત ${vachName(item.quote.vach)}`, title: titles[item.quote.vachno],
     topic: `${item.topic} › ${item.sub}`, app: "વચનામૃત અમૃત બિંદુ", site: location.host, type,
   })
+  const card = (type?: "image/jpeg" | "image/png") => quoteCard(opts(type))
+  const cards = () => quoteCards(opts()) // very long quotes come back as 2–4 parts
   const name = `vachanamrut-${item.quote.vachno}`
   // Draw the picture as soon as the menu opens: Safari only allows the share sheet right after a tap,
   // so it must be ready by the time WhatsApp/Telegram/X is tapped.
-  const ready = useRef<Promise<Blob> | null>(null)
+  const ready = useRef<Promise<Blob[]> | null>(null)
   useEffect(() => {
-    if (open && canShareFiles && !ready.current) ready.current = card()
+    if (open && canShareFiles && !ready.current) ready.current = cards()
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
   const download = async () => {
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(await card()), download: `${name}.jpg` })
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-    setDone("ચિત્ર ડાઉનલોડ થયું")
+    const all = await (ready.current ??= cards())
+    all.forEach((b, k) => {
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(b), download: all.length > 1 ? `${name}-${k + 1}.jpg` : `${name}.jpg` })
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    })
+    setDone(all.length > 1 ? `${all.length} ચિત્રો ડાઉનલોડ થયાં` : "ચિત્ર ડાઉનલોડ થયું")
   }
   // Must start inside the click (browsers require it): the picture is drawn while the clipboard waits for it.
   const copyImage = () => {
@@ -913,8 +921,9 @@ function ShareMenu({ item, url, onReport }: { item: Item; url: string; onReport:
       // Some apps (WhatsApp on iPhone) drop the text when a picture is attached — keep it on the clipboard too.
       const note = `${shareNote(item.topic)} ${url}`
       navigator.clipboard?.writeText(note).catch(() => {})
-      const file = new File([await (ready.current ??= card())], `${name}.jpg`, { type: "image/jpeg" })
-      await navigator.share({ files: [file], text: note }).catch(() => {})
+      const all = await (ready.current ??= cards())
+      const files = all.map((b, k) => new File([b], all.length > 1 ? `${name}-${k + 1}.jpg` : `${name}.jpg`, { type: "image/jpeg" }))
+      await navigator.share({ files, text: note }).catch(() => {})
       return setOpen(false)
     }
     copyImage()
@@ -1227,7 +1236,8 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               className="press mt-5 inline-flex items-center gap-1 rounded-full bg-saffron px-4 py-2 text-sm font-medium text-white">
               વાંચવાનું શરૂ કરો <ChevronRight className="size-4" />
             </a>
-            <div className="mt-6 border-t pt-4">
+            <div className="mt-6 flex flex-wrap gap-2 border-t pt-4">
+              <ShareAppButton />
               <Button variant="outline" className="press rounded-full" onClick={() => setFeedback(true)}>
                 <MessageSquareWarning className="size-4" /> સૂચન / ભૂલ જણાવો
               </Button>
@@ -1390,6 +1400,32 @@ function InstallHint() {
         <X className="size-4" />
       </button>
     </div>
+  )
+}
+
+/** Share the app itself (not one quote): phone share sheet, or copy the link with a drawn ✓. */
+function ShareAppButton({ compact }: { compact?: boolean }) {
+  const [copied, setCopied] = useState(false)
+  const url = `${location.origin}/`
+  const text = "વચનામૃતનાં અમૃત બિંદુ — વિષય પ્રમાણે વાંચો, સાચવો અને મિત્રોને મોકલો 🙏"
+  const go = async () => {
+    if (navigator.share && matchMedia("(pointer: coarse)").matches) return void navigator.share({ title: "વચનામૃત અમૃત બિંદુ", text, url }).catch(() => {})
+    await navigator.clipboard?.writeText(`${text}\n${url}`).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
+  }
+  const icon = (
+    <span className="relative grid place-items-center">
+      <Share2 className={cn("swap size-4", copied && "swap-out")} />
+      <DrawnCheck on={copied} className="absolute size-4 text-saffron" />
+    </span>
+  )
+  if (compact)
+    return <button onClick={go} className="press inline-flex items-center gap-1.5 hover:text-foreground">{icon}{copied ? "લિંક કૉપિ થઈ" : "એપ શેર કરો"}</button>
+  return (
+    <Button variant="outline" onClick={go} className="press rounded-full">
+      {icon} {copied ? "લિંક કૉપિ થઈ" : "મિત્રોને એપ મોકલો"}
+    </Button>
   )
 }
 
@@ -1623,7 +1659,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
   const enterFrom = { opacity: 0, scale: 0.98 }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-1">
+    <div className="flex min-h-0 flex-1 flex-col pb-0">
       {/* progress */}
       <div className={cn("mx-4 mt-2 h-0.5 overflow-hidden rounded-full bg-muted", items.length < 2 && "invisible")}>
         <div
@@ -1637,7 +1673,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
         initial={jump.key && !reduce ? enterFrom : false}
         animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
         transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-        className="relative mx-4 mt-2 mb-4 min-h-0 flex-1"
+        className="relative mx-4 mt-2 mb-3 min-h-0 flex-1"
       >
         {visible
           .map((k, depth) => {
@@ -1719,22 +1755,22 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
 
       {/* controls */}
       <div className={cn("flex items-center justify-between px-2", items.length < 2 && "hidden")}>
-        <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground" aria-label="કોઈ પણ એક · Random quote" onClick={randomCard}>
+        <Button variant="ghost" size="icon" className="press size-10 text-muted-foreground" aria-label="કોઈ પણ એક · Random quote" onClick={randomCard}>
           <Shuffle className="size-[18px]" />
         </Button>
-        <Button variant="ghost" size="icon" className="press size-11" onClick={() => toss(1)} aria-label="પાછલું અમૃત બિંદુ">
+        <Button variant="ghost" size="icon" className="press size-10" onClick={() => toss(1)} aria-label="પાછલું અમૃત બિંદુ">
           <ChevronLeft className="size-5" />
         </Button>
         <Drawer open={sheet} onOpenChange={setSheet} showSwipeHandle>
-          <DrawerTrigger render={<Button variant="ghost" className="press h-11 min-w-20 gap-1.5 px-3 text-sm font-normal tabular-nums" aria-label="અમૃત બિંદુ પર જાઓ" />}>
+          <DrawerTrigger render={<Button variant="ghost" className="press h-10 min-w-20 gap-1.5 px-3 text-sm font-normal tabular-nums" aria-label="અમૃત બિંદુ પર જાઓ" />}>
             <RollingNumber value={i + 1} /> <span className="text-muted-foreground">/ {items.length}</span>
           </DrawerTrigger>
           <JumpSheet items={items} current={order[i]} onJump={jumpTo} onReorder={onReorder} />
         </Drawer>
-        <Button variant="ghost" size="icon" className="press size-11" onClick={() => toss(-1)} aria-label="આગલું અમૃત બિંદુ">
+        <Button variant="ghost" size="icon" className="press size-10" onClick={() => toss(-1)} aria-label="આગલું અમૃત બિંદુ">
           <ChevronRight className="size-5" />
         </Button>
-        <Button variant="ghost" size="icon" className="press size-11 text-muted-foreground" onClick={() => setSheet(true)} aria-label="બધાં અમૃત બિંદુઓની યાદી">
+        <Button variant="ghost" size="icon" className="press size-10 text-muted-foreground" onClick={() => setSheet(true)} aria-label="બધાં અમૃત બિંદુઓની યાદી">
           <ListOrdered className="size-[18px]" />
         </Button>
       </div>
