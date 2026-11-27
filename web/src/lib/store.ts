@@ -42,7 +42,7 @@ export function toggleTheme() {
 // ── Quote text size ──────────────────────────────────────────────────────
 // rem, so touch screens get them 12.5% larger too (default 1.125rem ≈ 20px on a phone)
 export const TEXT_SIZES = [1, 1.125, 1.25, 1.4, 1.6]
-const readSize = () => Math.min(Number(localStorage.getItem("textSize") ?? 2), TEXT_SIZES.length - 1)
+const readSize = () => Math.min(Number(localStorage.getItem("textSize") ?? 1), TEXT_SIZES.length - 1)
 const size = store("sizechange", readSize)
 const applySize = () => document.documentElement.style.setProperty("--qs", `${TEXT_SIZES[readSize()]}rem`)
 applySize()
@@ -67,8 +67,8 @@ export function toggleSaved(item: Item) {
   savedStore.emit()
 }
 
-// ── Route in the hash: #t=<topic>&s=<subtopic>&q=<card number> ────────────
-export type Route = { t?: string; s?: string; q?: number }
+// ── Route in the hash: #a=<short code>, or legacy #t=<topic>&s=<subtopic>&q=<card number> ──
+export type Route = { a?: string; t?: string; s?: string; q?: number }
 let routeCache = { hash: "\0", route: {} as Route }
 function readRoute(): Route {
   const h = location.hash.slice(1)
@@ -77,19 +77,28 @@ function readRoute(): Route {
   if (h && !h.includes("=")) route = { t: decodeURIComponent(h) } // old #<topic> links
   else if (h) {
     const p = new URLSearchParams(h)
-    route = { t: p.get("t") ?? undefined, s: p.get("s") ?? undefined, q: Number(p.get("q")) || undefined }
+    route = { a: p.get("a") ?? undefined, t: p.get("t") ?? undefined, s: p.get("s") ?? undefined, q: Number(p.get("q")) || undefined }
   }
   routeCache = { hash: h, route }
   return route
 }
 const route = store("hashchange", readRoute)
 export const useRoute = route.use
-const format = (r: Route) =>
+export const formatRoute = (r: Route) =>
   new URLSearchParams(Object.entries(r).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()
+let encodeRoute = (r: Route): Route => r
+export const setRouteEncoder = (encoder: (r: Route) => Route) => { encodeRoute = encoder }
+const format = (r: Route) => formatRoute(encodeRoute(r))
 /** Push a new view (back button works), or quietly replace (e.g. card position while swiping). */
 export function nav(r: Route, replace = false) {
-  if (r.t) localStorage.setItem("last", format(r)) // "continue where you left off" on Home
-  if (replace) history.replaceState(null, "", "#" + format(r))
+  if (r.t) localStorage.setItem("last", formatRoute(r)) // "continue where you left off" on Home
+  // Swiping keeps the current view (whole topic, one subtopic, Today, or Saved).
+  // Share links use the quote code; a view's position stays relative to that view.
+  if (replace) {
+    const view = encodeRoute({ t: r.t, s: r.s })
+    const hash = r.q !== undefined && !r.a ? formatRoute({ ...view, q: r.q }) : format(r)
+    history.replaceState(null, "", "#" + hash)
+  }
   else location.hash = format(r)
 }
 export const linkTo = (r: Route) => `${location.origin}${location.pathname}#${format(r)}`

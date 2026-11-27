@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform } from "motion/react"
 import {
-  Settings2, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy,
+  Settings2, Share, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy,
   Dices, FileDown, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
   Shuffle, Sun, Trash2, X,
 } from "lucide-react"
@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils"
 import { matches } from "@/lib/translit"
 import { quoteCard } from "@/lib/shareCard"
 import { printPdf } from "@/lib/print"
+import { quoteCode, createQuoteLinks } from "@/lib/quoteLinks"
 import {
-  type Item, type Quote, type Route, createList, reorderList, reorderSaved, setTextSize, deleteList, inList, linkTo, nav, isSaved, quoteKey, shareTargets,
+  type Item, type Quote, type Route, createList, reorderList, reorderSaved, setTextSize, deleteList, inList, linkTo, formatRoute, setRouteEncoder, nav, isSaved, quoteKey, shareTargets,
   shareNote, toggleInList, toggleSaved, toggleTheme, useDark, useLists, useRoute, useSaved, useTextSize,
   TEXT_SIZES,
 } from "@/lib/store"
@@ -92,7 +93,12 @@ const useDesktop = () =>
 export default function App() {
   const [data, setData] = useState<Data | null>(null)
   const [query, setQuery] = useState("")
-  const route = useRoute()
+  const urlRoute = useRoute()
+  const [shortRoutes, setShortRoutes] = useState(new Map<string, Route>())
+  const route = useMemo(() => {
+    const target = urlRoute.a ? shortRoutes.get(urlRoute.a) : undefined
+    return target ? { ...target, s: urlRoute.s ?? target.s, q: urlRoute.q ?? target.q } : urlRoute
+  }, [urlRoute, shortRoutes])
   const saved = useSaved()
   const lists = useLists()
   const [sideFeedback, setSideFeedback] = useState(false)
@@ -104,7 +110,11 @@ export default function App() {
       for (const subs of Object.values(d))
         for (const s of subs)
           for (const q of s.quotes ?? []) if ((q.text.match(/["“”]/g) ?? []).length % 2) q.text = q.text.replace(/\s*["”]\s*$/, "")
-      setData(sortAZ(d))
+      const sorted = sortAZ(d)
+      const links = createQuoteLinks(sorted, { home: HOME, topics: TOPICS, today: TODAY, saved: SAVED })
+      setRouteEncoder(links.shorten)
+      setShortRoutes(links.routes)
+      setData(sorted)
     })
   }, [])
 
@@ -120,9 +130,17 @@ export default function App() {
   const topics = data ? Object.keys(data) : []
   const current = route.t && (route.t === TODAY || route.t === SAVED || route.t === TOPICS || (data && route.t in data)) ? route.t : HOME
   useEffect(() => void document.querySelector("main")?.scrollTo(0, 0), [current])
+  // "#random" (the app-icon shortcut) opens one random amrut bindu
+  useEffect(() => {
+    if (!data || !unique.length || location.hash !== "#random") return
+    const it = unique[Math.floor(Math.random() * unique.length)]
+    const quotes = data[it.topic].find((x) => x.name === it.sub)!.quotes!
+    nav({ t: it.topic, s: it.sub, q: quotes.findIndex((x) => quoteKey(x) === quoteKey(it.quote)) + 1 }, true)
+    dispatchEvent(new HashChangeEvent("hashchange"))
+  }, [data, unique])
   useEffect(() => {
     if (current === HOME || current === TOPICS) return
-    const here = linkTo({ ...route, t: current }).split("#")[1]
+    const here = formatRoute({ ...route, t: current })
     localStorage.setItem("last", here)
     if (current !== TODAY && current !== SAVED) localStorage.setItem("lastTopic", here) // where the Topics tab returns to
   }, [route, current])
@@ -193,7 +211,7 @@ export default function App() {
                 {[...(saved.length ? [{ name: FAV, n: saved.length }] : []), ...lists.map((l) => ({ name: l.name, n: l.items.length }))].map((l) => {
                   const on = current === SAVED && route.s === l.name
                   return (
-                    <a key={l.name} href={"#" + new URLSearchParams({ t: SAVED, s: l.name })}
+                    <a key={l.name} href={linkTo({ t: SAVED, s: l.name })}
                       className={cn("press ml-5 flex items-center gap-2 rounded-md border-l px-2.5 py-1.5 text-sm",
                         on ? "border-saffron font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}>
                       {l.name === FAV ? <Heart className="size-3.5" /> : <ListChecks className="size-3.5" />}
@@ -218,7 +236,7 @@ export default function App() {
       </aside>
 
       {/* Main */}
-      <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+      <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))] md:pb-0">
         {!data ? (
           <LoadingSkeleton />
         ) : current === TOPICS && !searching ? (
@@ -274,18 +292,18 @@ function TabBar({ current }: { current: string }) {
   ] as const
   return (
     // Floating "liquid glass" bar: frosted, slightly saturated, with a hairline highlight on top.
-    <nav className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-40 flex rounded-[1.75rem] border border-foreground/10 bg-background/60 p-1 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl backdrop-saturate-150 md:hidden">
+    <nav className="fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] z-40 flex rounded-[1.6rem] border border-foreground/10 bg-background/60 p-1 shadow-[0_10px_30px_-8px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop-blur-xl backdrop-saturate-150 md:hidden">
       {tabs.map(([t, Icon, label]) => {
         const on = t === active
         return (
           <a
             key={t}
-            href={t === HOME ? "#" : "#" + new URLSearchParams({ t })}
+            href={t === HOME ? "#" : linkTo({ t })}
             aria-current={on ? "page" : undefined}
-            className={cn("press relative flex flex-1 flex-col items-center gap-0.5 py-2 text-xs transition-colors duration-150", on ? "text-foreground" : "text-muted-foreground")}
+            className={cn("press relative flex flex-1 flex-col items-center py-1.5 text-[0.6875rem] leading-tight transition-colors duration-150", on ? "text-foreground" : "text-muted-foreground")}
           >
             {on && <motion.span layoutId="tab" className="absolute inset-0 rounded-[1.4rem] bg-saffron-soft" transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }} />}
-            <Icon className={cn("relative size-[22px]", on && "text-saffron", on && t === SAVED && "fill-current")} strokeWidth={on ? 2.2 : 1.8} />
+            <Icon className={cn("relative size-5", on && "text-saffron", on && t === SAVED && "fill-current")} strokeWidth={on ? 2.2 : 1.8} />
             <span className="relative">{label}</span>
           </a>
         )
@@ -299,7 +317,7 @@ function SideLink({ t, current, label, count, icon, onClick }: {
 }) {
   return (
     <a
-      href={t === HOME ? "#" : "#" + new URLSearchParams({ t })}
+      href={t === HOME ? "#" : linkTo({ t })}
       onClick={onClick}
       className={cn(
         "press flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm",
@@ -469,7 +487,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
   const shown = sub ? sections.filter((s) => s.name === sub) : sections
   const ready = sections.every((s) => s.items)
   const items = shown.flatMap((s) => s.items ?? [])
-  const link = (n: number) => linkTo({ t: route.t, s: sub ?? undefined, q: n + 1 })
+  const link = (n: number) => linkTo({ a: quoteCode(items[n].quote) })
   const heading = title === TODAY ? "આજનાં અમૃત બિંદુ" : title === SAVED ? "સાચવેલાં" : title
   const meta =
     title === TODAY ? new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long", year: "numeric" })
@@ -516,7 +534,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
         <div className="flex shrink-0 items-center">{pdfButton}<HeaderButtons /></div>
       </div>
       {title !== TODAY && sections.length > 1 && (
-      <div className="px-4 pt-1 pb-3">
+      <div className="px-4 pt-1 pb-1">
         <SheetPicker
           label={title === SAVED ? "યાદી" : "પેટા વિષય"}
           items={[ALL, ...sections.map((s) => s.name)]}
@@ -551,7 +569,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
   // Desktop: the sidebar picks the topic, so no topic dropdown here. Heading reads topic → subtopic;
   // the right rail lists every subtopic (scroll-spy on "all", jump between them when one is open).
   const idx = sub ? sections.findIndex((s) => s.name === sub) : -1
-  const subHref = (name?: string) => "#" + new URLSearchParams(name ? { t: route.t!, s: name } : { t: route.t! })
+  const subHref = (name?: string) => linkTo(name ? { t: route.t!, s: name } : { t: route.t! })
   const subLabel = title === SAVED ? "યાદી" : "પેટા વિષય"
   return (
     <div key={sub ?? ""} className="enter mx-auto flex max-w-6xl gap-14 px-10 py-12">
@@ -682,7 +700,7 @@ function DesktopList({ sections, shown, target, link, single }: { sections: Sect
             {!single && (
               <h3 className="mb-6 flex items-baseline gap-3 text-lg font-semibold">
                 <span className="text-xs font-normal text-muted-foreground tabular-nums">{String(i + 1).padStart(2, "0")}</span>
-                <a href={"#" + new URLSearchParams({ t: s.items?.[0]?.topic ?? "", s: s.name })} className="hover:underline">{s.name}</a>
+                <a href={linkTo({ t: s.items?.[0]?.topic ?? "", s: s.name })} className="hover:underline">{s.name}</a>
               </h3>
             )}
             <div className="space-y-4">
@@ -1133,8 +1151,9 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
 
       {!q && (
         <div className="enter">
+          <InstallHint />
           {today && (
-            <a href={"#" + new URLSearchParams({ t: TODAY })}
+            <a href={linkTo({ t: TODAY })}
               className="card-glow press group relative mt-3 block overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:mt-8 md:pt-28 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.14)] transition-shadow duration-200 md:mt-0 md:p-7 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_20px_40px_-14px_rgba(0,0,0,0.2)]">
               <img src={IMAGES.manuscript.src} alt="" aria-hidden title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
               <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
@@ -1156,12 +1175,12 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
 
           <div className="mt-3 grid grid-cols-3 gap-2 md:mt-4 md:gap-3">
             {lastTopic && (lastTopic === SAVED || lastTopic === TODAY || lastTopic in data) ? (
-              <QuickLink href={"#" + last} icon={<History className="size-[18px]" />} label="આગળ વાંચો" sub={lastTopic.split(" · ")[0]} />
+              <QuickLink href={linkTo({ t: lastTopic, s: last.get("s") ?? undefined, q: Number(last.get("q")) || undefined })} icon={<History className="size-[18px]" />} label="આગળ વાંચો" sub={lastTopic.split(" · ")[0]} />
             ) : (
-              <QuickLink href={"#" + new URLSearchParams({ t: TOPICS })} icon={<History className="size-[18px]" />} label="વાંચવાનું શરૂ કરો" sub={`${Object.keys(data).length} વિષય`} />
+              <QuickLink href={linkTo({ t: TOPICS })} icon={<History className="size-[18px]" />} label="વાંચવાનું શરૂ કરો" sub={`${Object.keys(data).length} વિષય`} />
             )}
             <QuickLink onClick={random} icon={<Dices className="size-[18px]" />} label="આજે શું વાંચું?" sub="એક અમૃત બિંદુ" />
-            <QuickLink href={"#" + new URLSearchParams({ t: SAVED })} icon={<Heart className="size-[18px]" />} label="સાચવેલાં" sub={`${savedCount} અમૃત બિંદુ`} />
+            <QuickLink href={linkTo({ t: SAVED })} icon={<Heart className="size-[18px]" />} label="સાચવેલાં" sub={`${savedCount} અમૃત બિંદુ`} />
           </div>
         </div>
       )}
@@ -1173,7 +1192,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
           </h3>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
             {(q ? topics : picks).map((t, n) => (
-              <a key={t} href={"#" + new URLSearchParams({ t })} onClick={() => setQuery("")}
+              <a key={t} href={linkTo({ t })} onClick={() => setQuery("")}
                 style={{ animationDelay: `${Math.min(n * 12, 240)}ms` }}
                 className="press enter flex min-h-20 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/40">
                 <span className="text-base leading-snug font-medium">{t}</span>
@@ -1182,7 +1201,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
             ))}
           </div>
           {!q && (
-            <a href={"#" + new URLSearchParams({ t: TOPICS })}
+            <a href={linkTo({ t: TOPICS })}
               className="press group mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed py-3.5 text-sm font-medium text-saffron transition-colors duration-150 hover:border-saffron/50">
               બધા {Object.keys(data).length} વિષયો જુઓ · Explore more
               <ChevronRight className="size-4 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
@@ -1204,7 +1223,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               સંવત ૧૮૭૬ થી ૧૮૮૬ (ઈ.સ. ૧૮૧૯–૧૮૨૯) દરમિયાન ગઢડા, સારંગપુર, કારિયાણી, લોયા, પંચાળા, વરતાલ, અમદાવાદ વગેરે સ્થળે
               ભગવાન સ્વામિનારાયણે આપેલા ૨૭૩ ઉપદેશો એટલે વચનામૃત. અહીં તેમાંથી {unique.length} અમૃત બિંદુ {Object.keys(data).length} વિષયોમાં ગોઠવેલાં છે.
             </p>
-            <a href={"#" + new URLSearchParams({ t: TOPICS })}
+            <a href={linkTo({ t: TOPICS })}
               className="press mt-5 inline-flex items-center gap-1 rounded-full bg-saffron px-4 py-2 text-sm font-medium text-white">
               વાંચવાનું શરૂ કરો <ChevronRight className="size-4" />
             </a>
@@ -1332,7 +1351,7 @@ function TopicsPage({ data }: { data: Data }) {
           </h2>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
             {ts.map((t) => (
-              <a key={t} href={"#" + new URLSearchParams({ t })}
+              <a key={t} href={linkTo({ t })}
                 className="press flex min-h-24 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/50 hover:bg-saffron-soft">
                 <span className="text-sm leading-snug font-medium">{t}</span>
                 <span className="text-xs leading-relaxed text-muted-foreground tabular-nums">
@@ -1344,6 +1363,32 @@ function TopicsPage({ data }: { data: Data }) {
         </section>
       ))}
       {!groups.length && <p className="py-16 text-center text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}
+    </div>
+  )
+}
+
+/**
+ * iPhone/iPad Safari only: one-time hint to "Add to Home Screen" — Safari's own bar can't be hidden from a web page,
+ * but the installed app opens full screen. Hidden once dismissed, and never shown inside the installed app.
+ */
+function InstallHint() {
+  const [show, setShow] = useState(() => {
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+    const installed = matchMedia("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone
+    return ios && !installed && !localStorage.getItem("installHint")
+  })
+  if (!show) return null
+  const close = () => (localStorage.setItem("installHint", "1"), setShow(false))
+  return (
+    <div className="mt-3 flex items-start gap-3 rounded-2xl border border-saffron/30 bg-saffron-soft p-3.5">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-saffron text-white"><Share className="size-4" /></span>
+      <p className="min-w-0 flex-1 text-sm leading-relaxed">
+        <span className="font-semibold">એપ તરીકે ઉમેરો</span> — નીચે <Share className="inline size-3.5 align-[-2px] text-saffron" /> Share દબાવો, પછી
+        <span className="font-medium"> “Add to Home Screen”</span>. પછી આખી સ્ક્રીન પર ખૂલશે.
+      </p>
+      <button onClick={close} aria-label="બંધ કરો · Close" className="press -mt-1 -mr-1 grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground">
+        <X className="size-4" />
+      </button>
     </div>
   )
 }
@@ -1373,7 +1418,7 @@ function SearchResults({ q, results }: { q: string; results: (Item & { where: st
       </h3>
       <div className="space-y-3 md:space-y-4">
         {shown.map((r) => (
-          <QuoteCard key={quoteKey(r.quote)} item={r} url={linkTo({ t: r.topic, s: r.sub })} where={r.where} q={q} />
+          <QuoteCard key={quoteKey(r.quote)} item={r} url={linkTo({ a: quoteCode(r.quote) })} where={r.where} q={q} />
         ))}
       </div>
       {results.length > limit && (
@@ -1422,7 +1467,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
   const rotate = useTransform(px, [-300, 0, 300], [-10, 0, 10])
   const progress = useTransform([px, py], ([a, b]: number[]) => Math.min(Math.max(Math.abs(a), Math.abs(b)) / 200, 1))
   const scale1 = useTransform(progress, [0, 1], [0.95, 1])
-  const y1 = useTransform(progress, [0, 1], [14, 0])
+  const y1 = useTransform(progress, [0, 1], [9, 0])
 
   const say = (text: string) => setPill(text)
   useEffect(() => {
@@ -1580,7 +1625,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-1">
       {/* progress */}
-      <div className={cn("mx-4 mt-3 h-0.5 overflow-hidden rounded-full bg-muted", items.length < 2 && "invisible")}>
+      <div className={cn("mx-4 mt-2 h-0.5 overflow-hidden rounded-full bg-muted", items.length < 2 && "invisible")}>
         <div
           className="h-full origin-left bg-saffron transition-transform duration-200 ease-(--ease-out)"
           style={{ transform: `scaleX(${(i + 1) / items.length})` }}
@@ -1592,7 +1637,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
         initial={jump.key && !reduce ? enterFrom : false}
         animate={{ opacity: 1, scale: 1, rotate: 0, y: 0 }}
         transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-        className="relative mx-4 mt-4 mb-7 min-h-0 flex-1"
+        className="relative mx-4 mt-2 mb-4 min-h-0 flex-1"
       >
         {visible
           .map((k, depth) => {
@@ -1608,7 +1653,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
                 onPointerCancel={top ? onPointerUp : undefined}
                 style={
                   top ? { x: px, y: py, rotate, zIndex: 3 }
-                  : depth === 1 ? { scale: scale1, y: y1, zIndex: 2 } : { scale: 0.9, y: 28, zIndex: 1 }
+                  : depth === 1 ? { scale: scale1, y: y1, zIndex: 2 } : { scale: 0.9, y: 18, zIndex: 1 }
                 }
                 className={cn(
                   "card-glow absolute inset-0 flex origin-bottom flex-col rounded-3xl border bg-card p-6 pb-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.12)] select-none will-change-transform",

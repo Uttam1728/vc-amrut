@@ -8,8 +8,59 @@
   "background_color": "#161311",
   "theme_color": "#161311",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "આજનાં અમૃત બિંદુ",
+      "short_name": "આજ",
+      "url": "/#t=%E0%AA%86%E0%AA%9C%E0%AA%A8%E0%AA%BE%E0%AA%82+%E0%AA%85%E0%AA%AE%E0%AB%83%E0%AA%A4+%E0%AA%AC%E0%AA%BF%E0%AA%82%E0%AA%A6%E0%AB%81+%C2%B7+Today",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "આજે શું વાંચું?",
+      "short_name": "કોઈ પણ એક",
+      "url": "/#random",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "સાચવેલાં",
+      "short_name": "સાચવેલાં",
+      "url": "/#t=%E0%AA%B8%E0%AA%BE%E0%AA%9A%E0%AA%B5%E0%AB%87%E0%AA%B2%E0%AA%BE%E0%AA%82+%C2%B7+Saved",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

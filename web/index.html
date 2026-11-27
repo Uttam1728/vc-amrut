@@ -11,6 +11,14 @@
     <!-- updated from JS when the theme changes -->
     <meta name="theme-color" content="#161311" />
     <meta name="color-scheme" content="light dark" />
+    <!-- Apply the saved theme before anything draws: the iPhone app's status bar takes its colour from this first frame -->
+    <script>
+      try {
+        var light = localStorage.getItem("theme") === "light"
+        document.documentElement.classList.toggle("dark", !light)
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", light ? "#fbf9f3" : "#161311")
+      } catch (e) {}
+    </script>
     <title>વચનામૃત અમૃત બિંદુ · Vachanamrut Amrut Bindu</title>
   </head>
   <body>
