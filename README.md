@@ -15,7 +15,7 @@ Live: **https://vachanamrut-amrutbindu.pages.dev**
 web/              the app (Vite + React + Tailwind) — deployed to Cloudflare Pages
   public/         subtopics.json + vach.json (the data the app loads), images, service worker
   functions/      /api/feedback → Cloudflare D1
-data/             raw scraped data: topics.json, subtopics.json, subject-index.json
+data/             scraped data: topics.json, subtopics.json
 scripts/          scrape.py (quotes), vach_titles.py (titles), fetch_*images.py (image candidates)
 parked/feelings/  "how are you feeling?" mapping — paused, not used by the app
 PROJECT_NOTES.md  decisions, state and commands — read first

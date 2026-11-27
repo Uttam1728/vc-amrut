@@ -108,7 +108,7 @@ before first paint (iPhone status bar matches theme).
 - Floating tab bar kept (user likes it) but slimmed; card height prioritised everywhere.
 - No liquid-glass blur on quote cards (swipe jank + readability) — crystal edge instead.
 - Feelings feature ("આજે કેવું લાગે છે?") **parked** by user; files in `parked/feelings/` (feelings.txt,
-  feelings.py, all-subtopics.txt, feelings.json); `data/subject-index.json` (anirdesh "વિષયવાર વચનામૃતોની નોંધ").
+  feelings.py, all-subtopics.txt, feelings.json); `parked/feelings/subject-index.json` (anirdesh "વિષયવાર વચનામૃતોની નોંધ").
 - Liquid-glass repo (amanbairagi30) not used: no licence; built our own.
 - Images: only Wikimedia Commons CC BY-SA (sabha painting, manuscript, Mahant Swami photo). BAPS site photos not used (copyright).
 - Topic mind-map / graph (colleague's idea) rejected: 65 topics share Vachanamruts in 1,363 pairs → hairball,
