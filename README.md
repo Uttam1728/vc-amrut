@@ -17,7 +17,6 @@ web/              the app (Vite + React + Tailwind) — deployed to Cloudflare P
   functions/      /api/feedback → Cloudflare D1
 data/             raw scraped data: topics.json, subtopics.json, subject-index.json
 scripts/          scrape.py (quotes), vach_titles.py (titles), fetch_*images.py (image candidates)
-promo/            promo video: script, choreography, recorder (media files stay local)
 parked/feelings/  "how are you feeling?" mapping — paused, not used by the app
 PROJECT_NOTES.md  decisions, state and commands — read first
 ```
