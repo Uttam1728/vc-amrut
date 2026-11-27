@@ -200,6 +200,24 @@
 /* Theme switch: one calm cross-fade of the whole page. */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 300ms; animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
 
+/* Liquid glass for floating surfaces (menus, sheets, pills, toast): see-through, blurred, with a light rim. */
+.glass {
+  background: color-mix(in oklch, var(--popover) 62%, transparent) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  backdrop-filter: blur(22px) saturate(170%);
+  border: 1px solid oklch(1 0 0 / 0.10) !important;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.14), inset 0 0 0 1px oklch(1 0 0 / 0.03), 0 18px 40px -16px oklch(0 0 0 / 0.45);
+}
+:root:not(.dark) .glass {
+  background: color-mix(in oklch, var(--popover) 70%, transparent) !important;
+  border-color: oklch(0 0 0 / 0.07) !important;
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.9), 0 18px 40px -16px oklch(0.3 0.03 60 / 0.25);
+}
+/* Crystal edge for cards: a light top rim and soft inner sheen — no blur, so swiping stays smooth. */
+.crystal { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.10), inset 0 0 0 1px oklch(1 0 0 / 0.025), 0 1px 2px rgb(0 0 0 / 0.04), 0 10px 28px -10px rgb(0 0 0 / 0.30) !important; }
+:root:not(.dark) .crystal { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.95), 0 1px 2px rgb(0 0 0 / 0.04), 0 10px 28px -12px oklch(0.3 0.03 60 / 0.22) !important; }
+@media (prefers-reduced-transparency: reduce) { .glass { background: var(--popover) !important; backdrop-filter: none; -webkit-backdrop-filter: none; } }
+
 /* Desktop tooltips: hover a labelled icon button and a small label fades up after a short wait. */
 @media (hover: hover) and (pointer: fine) {
   [data-tip] { position: relative; }

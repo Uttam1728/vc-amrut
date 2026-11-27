@@ -438,12 +438,12 @@ function SheetPicker({ label, items, value, onChange, count, asTitle }: PickerPr
     <div className="min-w-0 flex-1">
       <Drawer open={open} onOpenChange={(o) => (setOpen(o), o || setQ(""))} showSwipeHandle>
         {asTitle ? (
-          <DrawerTrigger aria-label={label} className="press flex h-11 max-w-full min-w-0 items-center gap-1.5 rounded-2xl border bg-muted/60 pr-3 pl-4 text-left outline-none">
+          <DrawerTrigger aria-label={label} className="glass press flex h-11 max-w-full min-w-0 items-center gap-1.5 rounded-2xl pr-3 pl-4 text-left outline-none">
             <span className="truncate text-[0.9375rem] font-semibold tracking-tight">{value.split(" · ")[0]}</span>
             <ChevronDown className="size-4 shrink-0 text-saffron" />
           </DrawerTrigger>
         ) : (
-          <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 rounded-2xl bg-muted/60 pr-3 pl-4 font-normal pointer-coarse:focus-visible:border-border pointer-coarse:focus-visible:ring-0" />}>
+          <DrawerTrigger aria-label={label} render={<Button variant="outline" className="press h-11 w-full min-w-0 justify-start gap-2 rounded-2xl glass pr-3 pl-4 font-normal pointer-coarse:focus-visible:border-border pointer-coarse:focus-visible:ring-0" />}>
             <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
             <span className="min-w-0 flex-1 truncate text-left">{value}</span>
             <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
@@ -793,7 +793,7 @@ function QuoteCard({ id, item, url, flash, where, q }: { id?: string; item: Item
       id={id}
       onClick={tap}
       className={cn(
-        "card-glow relative scroll-mt-28 rounded-xl border bg-card p-6 transition-[border-color,box-shadow] duration-500 hover:border-foreground/15",
+        "card-glow crystal relative scroll-mt-28 rounded-xl border bg-card p-6 transition-[border-color,box-shadow] duration-500 hover:border-foreground/15",
         flash && "border-foreground/30 shadow-[0_0_0_4px_color-mix(in_oklch,var(--foreground)_8%,transparent)]",
       )}
     >
@@ -1123,7 +1123,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
 }) {
   const q = query.trim()
   const topics = Object.keys(data).filter((t) => !q || matches(t, q) || results.some((r) => r.topic === t))
-  const today = unique.length ? todays(unique)[0] : null
+  const todayList = unique.length ? todays(unique) : []
   const [picks] = useState(() => [...Object.keys(data)].sort(() => Math.random() - 0.5).slice(0, 4))
   const [feedback, setFeedback] = useState(false)
   const last = new URLSearchParams(localStorage.getItem("last") ?? "")
@@ -1161,26 +1161,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
       {!q && (
         <div className="enter">
           <InstallHint />
-          {today && (
-            <a href={linkTo({ t: TODAY })}
-              className="card-glow press group relative mt-3 block overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:mt-8 md:pt-28 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-12px_rgba(0,0,0,0.14)] transition-shadow duration-200 md:mt-0 md:p-7 hover:shadow-[0_1px_2px_rgba(0,0,0,0.05),0_20px_40px_-14px_rgba(0,0,0,0.2)]">
-              <img src={IMAGES.manuscript.src} alt="" aria-hidden title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
-              <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <CalendarDays className="size-3.5 text-saffron" /> આજનાં અમૃત બિંદુ · {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}
-                <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">1 / {TODAY_COUNT}</span>
-              </p>
-              <blockquote className="mt-3 line-clamp-5 font-serif text-(length:--qs) leading-[1.9]">
-                {/* words fade up one after another (idea: transitions.dev "Texts reveal"); capped so long quotes don't drag */}
-                {today.quote.text.split(" ").map((w, k) => (
-                  <Fragment key={k}><span className="reveal-word" style={{ animationDelay: `${Math.min(k * 25, 700)}ms` }}>{w}</span> </Fragment>
-                ))}
-              </blockquote>
-              <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-                {today.topic} › {today.sub} · {today.quote.vach}
-                <ChevronRight className="size-3.5 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
-              </p>
-            </a>
-          )}
+          {todayList.length > 0 && <TodayCarousel items={todayList} />}
 
           <div className="mt-3 grid grid-cols-3 gap-2 md:mt-4 md:gap-3">
             {lastTopic && (lastTopic === SAVED || lastTopic === TODAY || lastTopic in data) ? (
@@ -1426,6 +1407,58 @@ function ShareAppButton({ compact }: { compact?: boolean }) {
     <Button variant="outline" onClick={go} className="press rounded-full">
       {icon} {copied ? "લિંક કૉપિ થઈ" : "મિત્રોને એપ મોકલો"}
     </Button>
+  )
+}
+
+/**
+ * Today's 5 on Home, swiped sideways (native scroll-snap: follows the finger, flings, works with a trackpad).
+ * Dots and the "2 / 5" pill follow the swipe; tapping a card opens Today at that card.
+ */
+function TodayCarousel({ items }: { items: Item[] }) {
+  const [at, setAt] = useState(0)
+  const track = useRef<HTMLDivElement>(null)
+  const onScroll = () => {
+    const el = track.current
+    if (el) setAt(Math.round(el.scrollLeft / el.clientWidth))
+  }
+  const go = (k: number) => track.current?.scrollTo({ left: k * track.current.clientWidth, behavior: "smooth" })
+  const date = new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })
+  return (
+    <div className="mt-3 md:mt-8">
+      <div ref={track} onScroll={onScroll} aria-roledescription="carousel"
+        className="-mx-4 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] md:mx-0 [&::-webkit-scrollbar]:hidden">
+        {items.map((it, k) => (
+          <div key={quoteKey(it.quote)} className="w-full shrink-0 snap-center px-4 md:px-0" aria-label={`${k + 1} / ${items.length}`}>
+            <a href={linkTo({ t: TODAY, q: k + 1 })}
+              className="card-glow crystal press group relative block h-full overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:p-7 md:pt-28">
+              <img src={IMAGES.manuscript.src} alt="" aria-hidden className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
+              <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <CalendarDays className="size-3.5 text-saffron" /> આજનાં અમૃત બિંદુ · {date}
+                <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">{k + 1} / {items.length}</span>
+              </p>
+              <blockquote className="mt-3 line-clamp-5 font-serif text-(length:--qs) leading-[1.9]">
+                {k === 0
+                  ? it.quote.text.split(" ").map((w, j) => ( // words fade up one after another on the first card
+                      <Fragment key={j}><span className="reveal-word" style={{ animationDelay: `${Math.min(j * 25, 700)}ms` }}>{w}</span> </Fragment>
+                    ))
+                  : it.quote.text}
+              </blockquote>
+              <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+                <span className="truncate">{it.topic} › {it.sub} · {it.quote.vach}</span>
+                <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
+              </p>
+            </a>
+          </div>
+        ))}
+      </div>
+      {/* dots: show where you are; tap to jump */}
+      <div className="mt-2.5 flex justify-center gap-1.5">
+        {items.map((_, k) => (
+          <button key={k} onClick={() => go(k)} aria-label={`${k + 1} / ${items.length}`}
+            className={cn("h-1.5 rounded-full transition-[width,background-color] duration-200 ease-(--ease-out)", k === at ? "w-5 bg-saffron" : "w-1.5 bg-muted-foreground/30")} />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -1692,7 +1725,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
                   : depth === 1 ? { scale: scale1, y: y1, zIndex: 2 } : { scale: 0.9, y: 18, zIndex: 1 }
                 }
                 className={cn(
-                  "card-glow absolute inset-0 flex origin-bottom flex-col rounded-3xl border bg-card p-6 pb-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.12)] select-none will-change-transform",
+                  "card-glow crystal absolute inset-0 flex origin-bottom flex-col rounded-3xl border bg-card p-6 pb-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.12)] select-none will-change-transform",
                   !top && "pointer-events-none",
                   top && "touch-none",
                 )}
@@ -1744,7 +1777,7 @@ function Deck({ items, start, onIndex, link, label, onReorder }: {
                 animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
                 exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6, scale: 0.95, filter: "blur(4px)" }}
                 transition={{ type: "spring", duration: 0.4, bounce: 0.25 }}
-                className="rounded-full bg-foreground px-3.5 py-1.5 text-xs font-medium text-background shadow-lg"
+                className="glass rounded-full px-3.5 py-1.5 text-xs font-medium text-foreground"
               >
                 {pill}
               </motion.span>
