@@ -1412,49 +1412,79 @@ function ShareAppButton({ compact }: { compact?: boolean }) {
 
 /**
  * Today's 5 on Home, swiped sideways (native scroll-snap: follows the finger, flings, works with a trackpad).
- * Dots and the "2 / 5" pill follow the swipe; tapping a card opens Today at that card.
+ * Endless: two copies sit at each end; when a swipe settles on a copy, we jump (instantly) to the real card.
+ * One card per view on phones, two on desktop (with arrows). Tapping a card opens Today at that card.
  */
+const CLONES = 2
 function TodayCarousel({ items }: { items: Item[] }) {
+  const n = items.length
   const [at, setAt] = useState(0)
   const track = useRef<HTMLDivElement>(null)
+  const settle = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const slides = [...items.slice(-CLONES), ...items, ...items.slice(0, CLONES)] // [4,5, 1..5, 1,2]
+  const step = () => (track.current?.firstElementChild as HTMLElement | null)?.offsetWidth || 1
+  const jump = (pos: number) => track.current && (track.current.scrollLeft = pos * step())
+
+  useLayoutEffect(() => void jump(CLONES), []) // start on the real first card
   const onScroll = () => {
     const el = track.current
-    if (el) setAt(Math.round(el.scrollLeft / el.clientWidth))
+    if (!el) return
+    const pos = Math.round(el.scrollLeft / step())
+    setAt((((pos - CLONES) % n) + n) % n)
+    clearTimeout(settle.current)
+    settle.current = setTimeout(() => { // once the swipe has stopped on a copy, swap to the real card
+      const p = Math.round(el.scrollLeft / step())
+      if (p < CLONES) jump(p + n)
+      else if (p >= CLONES + n) jump(p - n)
+    }, 120)
   }
-  const go = (k: number) => track.current?.scrollTo({ left: k * track.current.clientWidth, behavior: "smooth" })
+  const go = (pos: number) => track.current?.scrollTo({ left: pos * step(), behavior: "smooth" })
+  const posNow = () => Math.round((track.current?.scrollLeft ?? 0) / step())
   const date = new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })
   return (
-    <div className="mt-3 md:mt-8">
+    <div className="relative mt-3 md:mt-8">
       <div ref={track} onScroll={onScroll} aria-roledescription="carousel"
         className="-mx-4 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] md:mx-0 [&::-webkit-scrollbar]:hidden">
-        {items.map((it, k) => (
-          <div key={quoteKey(it.quote)} className="w-full shrink-0 snap-center px-4 md:px-0" aria-label={`${k + 1} / ${items.length}`}>
-            <a href={linkTo({ t: TODAY, q: k + 1 })}
-              className="card-glow crystal press group relative block h-full overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:p-7 md:pt-28">
-              <img src={IMAGES.manuscript.src} alt="" aria-hidden className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
-              <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <CalendarDays className="size-3.5 text-saffron" /> આજનાં અમૃત બિંદુ · {date}
-                <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">{k + 1} / {items.length}</span>
-              </p>
-              <blockquote className="mt-3 line-clamp-5 font-serif text-(length:--qs) leading-[1.9]">
-                {k === 0
-                  ? it.quote.text.split(" ").map((w, j) => ( // words fade up one after another on the first card
-                      <Fragment key={j}><span className="reveal-word" style={{ animationDelay: `${Math.min(j * 25, 700)}ms` }}>{w}</span> </Fragment>
-                    ))
-                  : it.quote.text}
-              </blockquote>
-              <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-                <span className="truncate">{it.topic} › {it.sub} · {it.quote.vach}</span>
-                <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
-              </p>
-            </a>
-          </div>
-        ))}
+        {slides.map((it, i) => {
+          const k = (((i - CLONES) % n) + n) % n
+          const copy = i < CLONES || i >= CLONES + n
+          return (
+            <div key={i} aria-hidden={copy || undefined} className="w-full shrink-0 snap-center px-4 md:w-1/2 md:snap-start md:px-1.5" aria-label={`${k + 1} / ${n}`}>
+              <a href={linkTo({ t: TODAY, q: k + 1 })} tabIndex={copy ? -1 : undefined}
+                className="card-glow crystal press group relative block h-full overflow-hidden rounded-3xl border bg-card p-5 pt-[5.5rem] md:p-7 md:pt-28">
+                <img src={IMAGES.manuscript.src} alt="" aria-hidden className="absolute inset-x-0 top-0 h-20 w-full object-cover object-[50%_30%] opacity-90 dark:opacity-50 [mask-image:linear-gradient(to_bottom,black_40%,transparent)] md:h-24" />
+                <p className="relative flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <CalendarDays className="size-3.5 text-saffron" /> આજનાં અમૃત બિંદુ · {date}
+                  <span className="ml-auto rounded-full bg-saffron-soft px-2 py-0.5 font-medium text-saffron tabular-nums">{k + 1} / {n}</span>
+                </p>
+                <blockquote className="mt-3 line-clamp-5 font-serif text-(length:--qs) leading-[1.9]">
+                  {i === CLONES
+                    ? it.quote.text.split(" ").map((w, j) => ( // words fade up one after another on the first card
+                        <Fragment key={j}><span className="reveal-word" style={{ animationDelay: `${Math.min(j * 25, 700)}ms` }}>{w}</span> </Fragment>
+                      ))
+                    : it.quote.text}
+                </blockquote>
+                <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="truncate">{it.topic} › {it.sub} · {it.quote.vach}</span>
+                  <ChevronRight className="size-3.5 shrink-0 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
+                </p>
+              </a>
+            </div>
+          )
+        })}
       </div>
+      {/* desktop arrows (no swipe with a mouse) — endless, so always available */}
+      {[-1, 1].map((d) => (
+        <button key={d} onClick={() => go(posNow() + d)} aria-label={d < 0 ? "પાછલું" : "આગલું"}
+          className={cn("glass press absolute top-[calc(50%-0.75rem)] z-10 hidden size-10 -translate-y-1/2 place-items-center rounded-full md:grid",
+            d < 0 ? "-left-5" : "-right-5")}>
+          {d < 0 ? <ChevronLeft className="size-5" /> : <ChevronRight className="size-5" />}
+        </button>
+      ))}
       {/* dots: show where you are; tap to jump */}
       <div className="mt-2.5 flex justify-center gap-1.5">
         {items.map((_, k) => (
-          <button key={k} onClick={() => go(k)} aria-label={`${k + 1} / ${items.length}`}
+          <button key={k} onClick={() => go(k + CLONES)} aria-label={`${k + 1} / ${n}`}
             className={cn("h-1.5 rounded-full transition-[width,background-color] duration-200 ease-(--ease-out)", k === at ? "w-5 bg-saffron" : "w-1.5 bg-muted-foreground/30")} />
         ))}
       </div>
