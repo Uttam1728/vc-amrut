@@ -1,16 +1,17 @@
 # Reads feelings.txt (human-editable: "topic › subtopic" per line) and writes:
-#   web/public/feelings.json  — what the app uses
+#   feelings.json             — what the app would use (copy to web/public/ if the feature returns)
 #   feelings-review.md        — the same list with amrut bindu counts, for reviewing
 # Any line that doesn't match a real subtopic is reported and skipped (usually a typo).
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).parent
-data = json.loads((ROOT / "subtopics.json").read_text())
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
+data = json.loads((ROOT / "data" / "subtopics.json").read_text())
 count = {(t, s["name"]): len(s.get("quotes") or []) for t, subs in data.items() for s in subs}
 
 feelings, problems = [], []
-for n, raw in enumerate((ROOT / "feelings.txt").read_text().splitlines(), 1):
+for n, raw in enumerate((HERE / "feelings.txt").read_text().splitlines(), 1):
     line = raw.strip()
     if not line or (line.startswith("#") and not line.startswith("##")):
         continue
@@ -29,7 +30,7 @@ for n, raw in enumerate((ROOT / "feelings.txt").read_text().splitlines(), 1):
     else:
         feelings[-1]["subtopics"].append([topic, sub])
 
-(ROOT / "web" / "public" / "feelings.json").write_text(json.dumps(feelings, ensure_ascii=False, indent=1))
+(HERE / "feelings.json").write_text(json.dumps(feelings, ensure_ascii=False, indent=1))
 
 md = ["# Feelings → subtopics (generated from feelings.txt — edit that file, not this one)\n"]
 for f in feelings:
@@ -37,7 +38,7 @@ for f in feelings:
     md.append(f"\n## {f['emoji']} {f['label']} · {f['en']} — {len(f['subtopics'])} subtopics, {total} amrut bindu\n")
     md.append("| Topic | Subtopic | Amrut bindu |\n|---|---|---|")
     md += [f"| {t} | {s} | {count[(t, s)]} |" for t, s in f["subtopics"]]
-(ROOT / "feelings-review.md").write_text("\n".join(md) + "\n")
+(HERE / "feelings-review.md").write_text("\n".join(md) + "\n")
 
 for f in feelings:
     print(f"{f['emoji']} {f['label']}: {len(f['subtopics'])} subtopics, {sum(count[tuple(x)] for x in f['subtopics'])} amrut bindu")

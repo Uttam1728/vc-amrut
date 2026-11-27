@@ -12,3 +12,13 @@ subject-index.raw.json
 .agents/
 .claude/
 skills-lock.json
+
+# promo video build files (re-create with promo/rec.mjs)
+promo/frames/
+promo/raw.mp4
+promo/.run.js
+promo/frames.txt
+promo/start.txt
+promo/*.mp4
+promo/voice/
+promo/samples/

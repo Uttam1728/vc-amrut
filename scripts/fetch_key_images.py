@@ -2,7 +2,7 @@
 import json, re, time, urllib.parse, urllib.request
 from pathlib import Path
 
-DIR = Path(__file__).with_name("images-review")
+DIR = Path(__file__).resolve().parent.parent / "images-review"
 UA = {"User-Agent": "vachanamrut-quotes-review/1.0 (personal study app; image review)"}
 KEY = ["Courtyard of Dada Khachar", "Vachanamrut Cover Image", "Places of the Vachanamrut", "discoursing on the Vachanamrut",
        "Swaminarayan Temple, Gadhada - panoramio", "Nilkanth Varni", "Vachanamrut English", "Gopinathji Maharaj Gadhada",

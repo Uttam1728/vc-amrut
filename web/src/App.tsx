@@ -3,7 +3,7 @@ import { AnimatePresence, Reorder, animate, motion, useDragControls, useMotionVa
 import {
   Settings2, Share, LoaderCircle, ArrowUpRight, BookOpen, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Copy,
   Dices, FileDown, GripVertical, Heart, History, House, ImageIcon, MessageSquareWarning, Minus, ListChecks, ListOrdered, ListPlus, MessageCircle, Moon, Plus, Search, Send, Share2,
-  Shuffle, Sun, Trash2, X,
+  Bookmark, ScrollText, Shuffle, Sun, Trash2, X,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -19,7 +19,7 @@ import { quoteCard, quoteCards } from "@/lib/shareCard"
 import { printPdf } from "@/lib/print"
 import { quoteCode, createQuoteLinks } from "@/lib/quoteLinks"
 import {
-  type Item, type Quote, type Route, createList, reorderList, reorderSaved, setTextSize, deleteList, inList, linkTo, formatRoute, setRouteEncoder, nav, isSaved, quoteKey, shareTargets,
+  type Item, type Quote, type Route, createList, toggleFavVach, useFavVachs, reorderList, reorderSaved, setTextSize, deleteList, inList, linkTo, formatRoute, setRouteEncoder, nav, isSaved, quoteKey, shareTargets,
   shareNote, toggleInList, toggleSaved, toggleTheme, useDark, useLists, useRoute, useSaved, useTextSize,
   TEXT_SIZES,
 } from "@/lib/store"
@@ -27,7 +27,7 @@ import {
 type Subtopic = { name: string; count: number | null; quotes?: Quote[] }
 type Data = Record<string, Subtopic[]>
 /** A group of cards on screen. `items` is undefined while a topic hasn't been scraped yet. */
-type Section = { name: string; items?: Item[] }
+type Section = { name: string; items?: Item[]; vach?: boolean } // vach: a saved Vachanamrut, shown in Saved but not in its "all"
 
 const HOME = "હોમ · Home"
 const TOPICS = "વિષયો · Topics" // tab only: the last topic you read
@@ -45,6 +45,43 @@ function todays(all: Item[]) {
 const FAV = "♥ પસંદગી · Favorites"
 const SAVED = "સાચવેલાં · Saved"
 const ALL = "બધા"
+const VACHS = "વચનામૃત · Vachanamrut"
+const SAVED_VACHS = "સાચવેલાં"
+
+/** The book's sections by Vachanamrut number (anirdesh's numbering; 263 is unused, the extra ones are 264–274). */
+const EXTRA = "વધારાનાં"
+const BOOK: [string, number, number][] = [
+  ["ગઢડા પ્રથમ", 1, 78], ["સારંગપુર", 79, 96], ["કારિયાણી", 97, 108], ["લોયા", 109, 126], ["પંચાળા", 127, 133],
+  ["ગઢડા મધ્ય", 134, 200], ["વરતાલ", 201, 220], ["અમદાવાદ", 221, 223], ["ગઢડા અંત્ય", 224, 262], [EXTRA, 264, 274],
+]
+const asciiDigits = (s: string) => s.replace(/[૦-૯]/g, (d) => String("૦૧૨૩૪૫૬૭૮૯".indexOf(d)))
+const guDigits = (n: number | string) => String(n).replace(/[0-9]/g, (d) => "૦૧૨૩૪૫૬૭૮૯"[+d]) // toLocaleString("gu-IN") isn't reliable everywhere
+const vachRoute = (n: number) => `v${n}`
+const vachNo = (t?: string) => (t && /^v\d+$/.test(t) ? Number(t.slice(1)) : 0)
+/** 250 → ["ગઢડા અંત્ય ૨૭", "૨૭", title]; the extra ones carry their name in the title ("જેતલપુર ૧: …"). */
+function vachLabel(n: number): [string, string, string] {
+  const sec = BOOK.find(([, a, b]) => n >= a && n <= b)
+  const title = titles[n] ?? ""
+  if (!sec) return [String(n), String(n), title]
+  if (sec[0] === EXTRA) {
+    const [name, ...rest] = title.split(": ")
+    return [name, name, rest.join(": ")]
+  }
+  const num = guDigits(n - sec[1] + 1)
+  return [`${sec[0]} ${num}`, num, title]
+}
+/** "ગઢડા પ્રથમ ૧" → "ગ. પ્ર. ૧" (the source's codes); the extra ones get the same style. */
+const CODES = (): Record<string, string> => ({ ...Object.fromEntries(Object.entries(PLACES).map(([k, v]) => [v, k])), જેતલપુર: "જે.", અશ્લાલી: "અશ્લાલી" })
+const shortCode = (full: string) => {
+  const m = full.match(/^(.*?)\s*([૦-૯]*)$/)!
+  const code = CODES()[m[1]] // a function: PLACES is declared further down
+  return code ? `${code} ${m[2]}`.trim() : full
+}
+let lastVach = 0 // the Vachanamrut last opened, so its list can scroll back to it
+/** Vachanamrut number → its amrut bindu, by topic. */
+type ByVach = Map<number, Map<string, Item[]>>
+const vachItems = (ts: Map<string, Item[]>) => [...new Map([...ts.values()].flat().map((i) => [quoteKey(i.quote), i])).values()]
+const vachCount = (byVach: ByVach, n: number) => (byVach.has(n) ? vachItems(byVach.get(n)!).length : 0)
 
 // "ગ. મ. ૬૫" → "ગઢડા મધ્ય ૬૫" — the short codes the source uses, spelled out for students.
 const PLACES: Record<string, string> = {
@@ -57,17 +94,18 @@ const vachName = (v: string) => {
 }
 
 /** Vachanamrut titles by number, e.g. 114 → "સંગશુદ્ધિનું" (from anirdesh.com's index). */
-let titles: Record<string, string> = {}
+// kept on globalThis so a dev hot-reload of this file doesn't blank them while the loaded data stays on screen
+const titles: Record<string, string> = ((globalThis as { vachTitles?: Record<string, string> }).vachTitles ??= {})
 
 /** Which Vachanamrut a quote is from — shown on top of every card; tap to read it in full. */
 function VachRef({ item, sub }: { item: Item; sub?: string }) {
   return (
     <div className="mb-4">
-      <a href={vachUrl(item.quote.vachno)} target="_blank" rel="noreferrer"
+      {/* opens every amrut bindu from this Vachanamrut */}
+      <a href={linkTo({ t: vachRoute(item.quote.vachno) })}
         className="press text-sm leading-snug font-semibold tracking-tight text-saffron">
         વચનામૃત {vachName(item.quote.vach)}
         {titles[item.quote.vachno] && <span className="font-normal text-muted-foreground"> · {titles[item.quote.vachno]}</span>}
-        <ArrowUpRight className="ml-0.5 inline size-3.5 align-[-2px] opacity-50" />
       </a>
       {sub && <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{sub}</p>}
     </div>
@@ -101,17 +139,18 @@ export default function App() {
   }, [urlRoute, shortRoutes])
   const saved = useSaved()
   const lists = useLists()
+  const favVachs = useFavVachs()
   const [sideFeedback, setSideFeedback] = useState(false)
 
   useEffect(() => {
     Promise.all([fetch("/subtopics.json").then((r) => r.json()), fetch("/vach.json").then((r) => r.json())]).then(([d, t]: [Data, Record<string, string>]) => {
-      titles = t
+      Object.assign(titles, t)
       // Quotes cut out of dialogue keep the speech's closing quote mark with no opening one (86 on the source) — drop it.
       for (const subs of Object.values(d))
         for (const s of subs)
           for (const q of s.quotes ?? []) if ((q.text.match(/["“”]/g) ?? []).length % 2) q.text = q.text.replace(/\s*["”]\s*$/, "")
       const sorted = sortAZ(d)
-      const links = createQuoteLinks(sorted, { home: HOME, topics: TOPICS, today: TODAY, saved: SAVED })
+      const links = createQuoteLinks(sorted, { home: HOME, topics: TOPICS, today: TODAY, saved: SAVED, vachanamrut: VACHS })
       setRouteEncoder(links.shorten)
       setShortRoutes(links.routes)
       setData(sorted)
@@ -127,8 +166,20 @@ export default function App() {
     return [...seen.values()]
   }, [data])
 
+  const byVach: ByVach = useMemo(() => {
+    const m: ByVach = new Map()
+    for (const [topic, subs] of Object.entries(data ?? {}))
+      for (const s of subs)
+        for (const quote of s.quotes ?? []) {
+          const ts = m.get(quote.vachno) ?? m.set(quote.vachno, new Map()).get(quote.vachno)!
+          const items = ts.get(topic) ?? ts.set(topic, []).get(topic)!
+          if (!items.some((i) => quoteKey(i.quote) === quoteKey(quote))) items.push({ topic, sub: s.name, quote })
+        }
+    return m
+  }, [data])
+
   const topics = data ? Object.keys(data) : []
-  const current = route.t && (route.t === TODAY || route.t === SAVED || route.t === TOPICS || (data && route.t in data)) ? route.t : HOME
+  const current = route.t && (route.t === TODAY || route.t === SAVED || route.t === TOPICS || route.t === VACHS || byVach.has(vachNo(route.t)) || (data && route.t in data)) ? route.t : HOME
   useEffect(() => void document.querySelector("main")?.scrollTo(0, 0), [current])
   // "#random" (the app-icon shortcut) opens one random amrut bindu
   useEffect(() => {
@@ -139,10 +190,10 @@ export default function App() {
     dispatchEvent(new HashChangeEvent("hashchange"))
   }, [data, unique])
   useEffect(() => {
-    if (current === HOME || current === TOPICS) return
+    if (current === HOME || current === TOPICS || current === VACHS) return
     const here = formatRoute({ ...route, t: current })
     localStorage.setItem("last", here)
-    if (current !== TODAY && current !== SAVED) localStorage.setItem("lastTopic", here) // where the Topics tab returns to
+    if (current !== TODAY && current !== SAVED && !vachNo(current)) localStorage.setItem("lastTopic", here) // where the Topics tab returns to
   }, [route, current])
 
   const sections: Section[] = useMemo(() => {
@@ -153,10 +204,16 @@ export default function App() {
       return [...groups].map(([name, items]) => ({ name, items }))
     }
     // Saved: favorites first, then the student's own lists — each one shows up as a "subtopic".
-    if (current === SAVED) return [{ name: FAV, items: saved }, ...lists].filter((s) => s.items.length)
-    if (current === HOME || current === TOPICS) return []
+    if (current === SAVED)
+      return [
+        { name: FAV, items: saved }, ...lists,
+        ...favVachs.filter((n) => byVach.has(n)).map((n) => ({ name: `${shortCode(vachLabel(n)[0])} · ${vachLabel(n)[2]}`, items: vachItems(byVach.get(n)!), vach: true })),
+      ].filter((s) => s.items.length)
+    if (current === HOME || current === TOPICS || current === VACHS) return []
+    // one Vachanamrut: its amrut bindu grouped by topic, the topic with the most first
+    if (vachNo(current)) return [...byVach.get(vachNo(current))!].sort((a, b) => b[1].length - a[1].length).map(([name, items]) => ({ name, items }))
     return data[current].map((s) => ({ name: s.name, items: s.quotes?.map((quote) => ({ topic: current, sub: s.name, quote })) }))
-  }, [data, current, unique, saved, lists])
+  }, [data, current, unique, saved, lists, byVach, favVachs])
 
   const q = query.trim()
   const searching = q.length >= 2 && !/[a-z]/i.test(q) // English input filters topic names only
@@ -205,8 +262,9 @@ export default function App() {
             {!q && (
               <>
                 <SideLink t={HOME} current={current} icon={<House className="size-4" />} label="હોમ" />
+                <SideLink t={VACHS} current={vachNo(current) ? VACHS : current} icon={<ScrollText className="size-4" />} label="વચનામૃત" />
                 <SideLink t={TODAY} current={current} icon={<CalendarDays className="size-4" />} label="આજનાં અમૃત બિંદુ" count={TODAY_COUNT} />
-                <SideLink t={SAVED} current={current} icon={<Heart className="size-4" />} label="સાચવેલાં" count={savedCount} />
+                <SideLink t={SAVED} current={current} icon={<Bookmark className="size-4" />} label="સાચવેલાં" count={savedCount} />
                 {/* your lists, right under Saved (Favorites first) */}
                 {[...(saved.length ? [{ name: FAV, n: saved.length }] : []), ...lists.map((l) => ({ name: l.name, n: l.items.length }))].map((l) => {
                   const on = current === SAVED && route.s === l.name
@@ -244,8 +302,10 @@ export default function App() {
           <LoadingSkeleton />
         ) : current === TOPICS && !searching ? (
           <TopicsPage data={data} />
+        ) : current === VACHS && !searching ? (
+          <VachPage byVach={byVach} />
         ) : searching || current === HOME ? (
-          <Home data={data} unique={unique} query={query} setQuery={setQuery} searching={searching} results={results} savedCount={savedCount} />
+          <Home data={data} byVach={byVach} unique={unique} query={query} setQuery={setQuery} searching={searching} results={results} savedCount={savedCount} />
         ) : (
           <TopicView
             key={current}
@@ -286,12 +346,13 @@ function LoadingSkeleton() {
 /** Phone navigation lives at the bottom, in thumb reach. Topics count as "Home" — that's where you pick them. */
 function TabBar({ current }: { current: string }) {
   // Each tab is highlighted only where it leads: Home = the home page, Topics = any topic you're reading.
-  const active = current === HOME || current === TODAY || current === SAVED ? current : TOPICS
+  // Today lives on Home (the carousel), so Home stays lit there.
+  const active = current === HOME || current === SAVED ? current : current === TODAY ? HOME : current === VACHS || vachNo(current) ? VACHS : TOPICS
   const tabs = [
     [HOME, House, "હોમ"],
     [TOPICS, BookOpen, "વિષયો"],
-    [TODAY, CalendarDays, "આજ"],
-    [SAVED, Heart, "સાચવેલાં"],
+    [VACHS, ScrollText, "વચનામૃત"],
+    [SAVED, Bookmark, "સાચવેલાં"],
   ] as const
   return (
     // Floating "liquid glass" bar: frosted, slightly saturated, with a hairline highlight on top.
@@ -340,9 +401,17 @@ function SideLink({ t, current, label, count, icon, onClick }: {
 }
 
 /** One settings button (text size + theme) — keeps phone headers free for the title. */
-function HeaderButtons() {
+/** ⚙ = text size + theme, where there are cards to read. Pages without cards pass `themeOnly`: one tap flips the theme. */
+function HeaderButtons({ themeOnly }: { themeOnly?: boolean }) {
   const dark = useDark()
   const size = useTextSize()
+  if (themeOnly)
+    return (
+      <Button variant="ghost" size="icon" onClick={toggleTheme} className="press size-11 text-muted-foreground md:size-9"
+        aria-label={dark ? "લાઇટ થીમ · Light theme" : "ડાર્ક થીમ · Dark theme"} data-tip={dark ? "લાઇટ થીમ" : "ડાર્ક થીમ"}>
+        {dark ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
+      </Button>
+    )
   return (
     <Popover>
       <PopoverTrigger render={<Button variant="ghost" size="icon" className="press size-11 text-muted-foreground md:size-9" aria-label="સેટિંગ્સ · Settings" data-tip="અક્ષર · થીમ" />}>
@@ -486,15 +555,38 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
   title: string; sections: Section[]; route: Route; pickerItems: string[]; pickerCount: (t: string) => number | null
 }) {
   const desktop = useDesktop()
-  const sub = route.s && sections.some((s) => s.name === route.s) ? route.s : null
-  const shown = sub ? sections.filter((s) => s.name === sub) : sections
+  const inAll = sections.filter((s) => !s.vach) // saved Vachanamruts are picked one at a time, never mixed into "all"
+  const sub = route.s && sections.some((s) => s.name === route.s) ? route.s : !inAll.length && sections.length ? sections[0].name : null
+  const shown = sub ? sections.filter((s) => s.name === sub) : inAll
   const ready = sections.every((s) => s.items)
-  const items = shown.flatMap((s) => s.items ?? [])
+  const vno = vachNo(title) // one Vachanamrut: the second picker filters by topic
+  if (vno) lastVach = vno
+  const back = vno > 0 && (
+    <a href={linkTo({ t: VACHS })} aria-label="પાછા · બધાં વચનામૃત" data-tip="બધાં વચનામૃત"
+      className="press -ml-2.5 grid size-11 shrink-0 place-items-center rounded-full text-muted-foreground hover:text-foreground md:hidden">
+      <ChevronLeft className="size-5" />
+    </a>
+  )
+  const dedupe = (its: Item[]) => [...new Map(its.map((i) => [quoteKey(i.quote), i])).values()] // a quote can sit under two topics
+  const items = vno && !sub ? dedupe(shown.flatMap((s) => s.items ?? [])) : shown.flatMap((s) => s.items ?? [])
+  const allCount = vno ? dedupe(sections.flatMap((s) => s.items ?? [])).length : sectionCount(inAll)
   const link = (n: number) => linkTo({ a: quoteCode(items[n].quote) })
-  const heading = title === TODAY ? "આજનાં અમૃત બિંદુ" : title === SAVED ? "સાચવેલાં" : title
+  const [vachFull, , vachTitle] = vno ? vachLabel(vno) : ["", "", ""]
+  const heading = title === TODAY ? "આજનાં અમૃત બિંદુ" : title === SAVED ? "સાચવેલાં" : vno ? `વચનામૃત ${vachFull}` : title
   const meta =
     title === TODAY ? new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long", year: "numeric" })
+    : vno ? `${vachTitle} · ${sections.length} વિષય · ${allCount} અમૃત બિંદુ`
     : `${sections.length} પેટા વિષય · ${sectionCount(sections)} અમૃત બિંદુ`
+  const subLabel = title === SAVED ? "યાદી" : vno ? "વિષય" : "પેટા વિષય"
+  // the line under the reference on each card, same on phone and desktop: what the picker doesn't already say
+  const cardLabel = (it: Item) =>
+    vno ? (sub ? it.sub : `${it.topic} › ${it.sub}`) : title === SAVED || (title === TODAY && !sub) ? `${it.topic} › ${it.sub}` : sub ? undefined : it.sub
+  const fullText = vno > 0 && (
+    <a href={vachUrl(vno)} target="_blank" rel="noreferrer" aria-label="પૂરું વચનામૃત વાંચો" data-tip="પૂરું વચનામૃત વાંચો"
+      className="press inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-full px-2.5 text-sm text-muted-foreground hover:text-foreground md:h-8 md:border md:px-3">
+      <BookOpen className="size-4" /><span className="hidden md:inline">પૂરું વચનામૃત</span><ArrowUpRight className="hidden size-3.5 opacity-60 md:inline" />
+    </a>
+  )
 
   const empty =
     title === SAVED && !sections.length ? (
@@ -517,7 +609,7 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
         quotes: (s.items ?? []).map((it) => ({
           reference: `વચનામૃત ${vachName(it.quote.vach)}`,
           title: titles[it.quote.vachno],
-          where: title === SAVED || title === TODAY ? `${it.topic} › ${it.sub}` : undefined,
+          where: title === SAVED || title === TODAY || vno ? `${it.topic} › ${it.sub}` : undefined,
           text: it.quote.text,
         })),
       })),
@@ -531,19 +623,23 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
           <p className="truncate text-base font-semibold tracking-tight">
             આજનાં અમૃત બિંદુ <span className="font-normal text-muted-foreground">· {new Date().toLocaleDateString("gu-IN", { day: "numeric", month: "long" })}</span>
           </p>
+        ) : vno ? (
+          <div className="flex min-w-0 items-center">{back}<p className="min-w-0 truncate text-base font-semibold tracking-tight">
+            {vachFull} <span className="font-normal text-muted-foreground">· {vachTitle}</span>
+          </p></div>
         ) : (
           <SheetPicker asTitle label="વિષય" items={pickerItems} value={title} onChange={(t) => nav({ t })} count={pickerCount} />
         )}
-        <div className="flex shrink-0 items-center">{pdfButton}<HeaderButtons /></div>
+        <div className="flex shrink-0 items-center">{fullText}{pdfButton}<HeaderButtons /></div>
       </div>
       {title !== TODAY && sections.length > 1 && (
       <div className="px-4 pt-1 pb-1">
         <SheetPicker
-          label={title === SAVED ? "યાદી" : "પેટા વિષય"}
-          items={[ALL, ...sections.map((s) => s.name)]}
+          label={subLabel}
+          items={[...(inAll.length ? [ALL] : []), ...sections.map((s) => s.name)]}
           value={sub ?? ALL}
           onChange={(v) => nav({ t: route.t, s: v === ALL ? undefined : v })}
-          count={(n) => (n === ALL ? sectionCount(sections) : (sections.find((s) => s.name === n)?.items?.length ?? null))}
+          count={(n) => (n === ALL ? allCount : (sections.find((s) => s.name === n)?.items?.length ?? null))}
         />
       </div>
       )}
@@ -562,8 +658,8 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
             onIndex={(n) => nav({ t: route.t, s: sub ?? undefined, q: n + 1 }, true)}
             link={link}
             // Saved's second picker chooses a list, not a subtopic, so there the card always says where the quote is from.
-            onReorder={title === SAVED && sub ? (next) => (sub === FAV ? reorderSaved(next) : reorderList(sub, next)) : undefined}
-            label={(it) => (title === SAVED || (title === TODAY && !sub) ? `${it.topic} › ${it.sub}` : sub ? undefined : it.sub)}
+            onReorder={title === SAVED && sub && !shown[0]?.vach ? (next) => (sub === FAV ? reorderSaved(next) : reorderList(sub, next)) : undefined}
+            label={cardLabel}
           />
         )}
       </div>
@@ -573,14 +669,17 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
   // the right rail lists every subtopic (scroll-spy on "all", jump between them when one is open).
   const idx = sub ? sections.findIndex((s) => s.name === sub) : -1
   const subHref = (name?: string) => linkTo(name ? { t: route.t!, s: name } : { t: route.t! })
-  const subLabel = title === SAVED ? "યાદી" : "પેટા વિષય"
   return (
     <div key={sub ?? ""} className="enter mx-auto flex max-w-6xl gap-14 px-10 py-12">
       <article className="max-w-3xl min-w-0 flex-1">
         <header className="mb-10">
-          {sub && (
+          {sub ? (
             <a href={subHref()} className="press inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ChevronLeft className="size-4" /> {heading}
+            </a>
+          ) : vno > 0 && (
+            <a href={linkTo({ t: VACHS })} className="press inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              <ChevronLeft className="size-4" /> બધાં વચનામૃત
             </a>
           )}
           <h2 className="mt-1 font-serif text-4xl leading-tight font-semibold tracking-tight">{sub ?? heading}</h2>
@@ -589,20 +688,23 @@ function TopicView({ title, sections, route, pickerItems, pickerCount }: {
               {sub ? `${subLabel} ${idx + 1} / ${sections.length} · ${items.length} અમૃત બિંદુ` : meta}
             </p>
             {!empty && <PdfButton onExport={exportPdf} labelled />}
+            {fullText}
           </div>
           {sections.length > 1 && title !== TODAY && (
             <div className="mt-6 max-w-md">
               <Picker
                 label={subLabel}
-                items={[ALL, ...sections.map((s) => s.name)]}
+                items={[...(inAll.length ? [ALL] : []), ...sections.map((s) => s.name)]}
                 value={sub ?? ALL}
                 onChange={(v) => nav({ t: route.t, s: v === ALL ? undefined : v })}
-                count={(n) => (n === ALL ? sectionCount(sections) : (sections.find((s) => s.name === n)?.items?.length ?? null))}
+                count={(n) => (n === ALL ? allCount : (sections.find((s) => s.name === n)?.items?.length ?? null))}
               />
             </div>
           )}
         </header>
-        {empty ?? <DesktopList sections={sections} shown={shown} target={route.q} link={link} single={!!sub || sections.length === 1} />}
+        {empty ?? <DesktopList sections={sections} shown={shown} target={route.q}
+          label={cardLabel}
+          single={!!sub || sections.length === 1} />}
         {sub && (
           <nav className="mt-16 grid grid-cols-2 gap-3 border-t pt-8">
             {[sections[idx - 1], sections[idx + 1]].map((s, n) =>
@@ -682,7 +784,9 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="m-4 rounded-2xl border border-dashed p-6 text-sm leading-relaxed text-muted-foreground md:m-0">{children}</p>
 }
 
-function DesktopList({ sections, shown, target, link, single }: { sections: Section[]; shown: Section[]; target?: number; link: (n: number) => string; single: boolean }) {
+function DesktopList({ sections, shown, target, single, label }: {
+  sections: Section[]; shown: Section[]; target?: number; single: boolean; label?: (it: Item) => string | undefined
+}) {
   const [flash, setFlash] = useState<number | undefined>(target)
 
   // Deep link to a card: bring it into view and briefly ring it so the eye finds it.
@@ -709,7 +813,7 @@ function DesktopList({ sections, shown, target, link, single }: { sections: Sect
             <div className="space-y-4">
               {s.items!.map((it) => {
                 const k = n++
-                return <QuoteCard key={quoteKey(it.quote)} id={`c${k + 1}`} item={it} url={link(k)} flash={flash === k + 1} />
+                return <QuoteCard key={quoteKey(it.quote)} id={`c${k + 1}`} item={it} where={label?.(it) ? [label(it)!] : undefined} url={linkTo({ a: quoteCode(it.quote) })} flash={flash === k + 1} />
               })}
             </div>
           </section>
@@ -1117,14 +1221,16 @@ function Highlight({ text, q }: { text: string; q: string }) {
 
 // ── Home ─────────────────────────────────────────────────────────────────────
 
-function Home({ data, unique, query, setQuery, searching, results, savedCount }: {
-  data: Data; unique: Item[]; query: string; setQuery: (q: string) => void; searching: boolean
+function Home({ data, byVach, unique, query, setQuery, searching, results, savedCount }: {
+  data: Data; byVach: ByVach; unique: Item[]; query: string; setQuery: (q: string) => void; searching: boolean
   results: (Item & { where: string[] })[]; savedCount: number
 }) {
   const q = query.trim()
   const topics = Object.keys(data).filter((t) => !q || matches(t, q) || results.some((r) => r.topic === t))
   const todayList = unique.length ? todays(unique) : []
   const [picks] = useState(() => [...Object.keys(data)].sort(() => Math.random() - 0.5).slice(0, 4))
+  // six Vachanamruts to try — only ones with a few amrut bindu, so the deck isn't nearly empty
+  const [vachPicks] = useState(() => [...byVach.keys()].filter((n) => vachCount(byVach, n) >= 3).sort(() => Math.random() - 0.5).slice(0, 6).sort((a, b) => a - b))
   const [feedback, setFeedback] = useState(false)
   const last = new URLSearchParams(localStorage.getItem("last") ?? "")
   const lastTopic = last.get("t")
@@ -1141,7 +1247,7 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
         <img src={IMAGES.sabha.src} alt={IMAGES.sabha.alt} title="© BAPS Swaminarayan Sanstha · CC BY-SA 4.0 · Wikimedia Commons" className="h-64 w-full object-cover object-[65%_35%] md:h-80" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
         <div className="absolute right-2 top-[calc(env(safe-area-inset-top,0px)+0.5rem)] rounded-full bg-background/60 backdrop-blur-md md:hidden">
-          <HeaderButtons />
+          <HeaderButtons themeOnly />
         </div>
         <div className="absolute inset-x-4 bottom-2 md:inset-x-8 md:bottom-6">
           <p className="text-xs font-medium text-white/80">જય સ્વામિનારાયણ · {new Date().toLocaleDateString("gu-IN", { weekday: "long", day: "numeric", month: "long" })}</p>
@@ -1164,13 +1270,13 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
           {todayList.length > 0 && <TodayCarousel items={todayList} />}
 
           <div className="mt-3 grid grid-cols-3 gap-2 md:mt-4 md:gap-3">
-            {lastTopic && (lastTopic === SAVED || lastTopic === TODAY || lastTopic in data) ? (
-              <QuickLink href={linkTo({ t: lastTopic, s: last.get("s") ?? undefined, q: Number(last.get("q")) || undefined })} icon={<History className="size-[18px]" />} label="આગળ વાંચો" sub={lastTopic.split(" · ")[0]} />
+            {lastTopic && (lastTopic === SAVED || lastTopic === TODAY || vachNo(lastTopic) || lastTopic in data) ? (
+              <QuickLink href={linkTo({ t: lastTopic, s: last.get("s") ?? undefined, q: Number(last.get("q")) || undefined })} icon={<History className="size-[18px]" />} label="આગળ વાંચો" sub={vachNo(lastTopic) ? vachLabel(vachNo(lastTopic))[0] : lastTopic.split(" · ")[0]} />
             ) : (
               <QuickLink href={linkTo({ t: TOPICS })} icon={<History className="size-[18px]" />} label="વાંચવાનું શરૂ કરો" sub={`${Object.keys(data).length} વિષય`} />
             )}
             <QuickLink onClick={random} icon={<Dices className="size-[18px]" />} label="આજે શું વાંચું?" sub="એક અમૃત બિંદુ" />
-            <QuickLink href={linkTo({ t: SAVED })} icon={<Heart className="size-[18px]" />} label="સાચવેલાં" sub={`${savedCount} અમૃત બિંદુ`} />
+            <QuickLink href={linkTo({ t: SAVED })} icon={<Bookmark className="size-[18px]" />} label="સાચવેલાં" sub={`${savedCount} અમૃત બિંદુ`} />
           </div>
         </div>
       )}
@@ -1197,6 +1303,32 @@ function Home({ data, unique, query, setQuery, searching, results, savedCount }:
               <ChevronRight className="size-4 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
             </a>
           )}
+        </>
+      )}
+
+      {!q && vachPicks.length > 0 && (
+        <>
+          <h3 className="mt-10 mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">આજે વાંચવા જેવાં વચનામૃત</h3>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
+            {vachPicks.map((n, k) => {
+              const [full, , title] = vachLabel(n)
+              return (
+                <a key={n} href={linkTo({ t: vachRoute(n) })} style={{ animationDelay: `${k * 12}ms` }}
+                  className="press enter flex min-h-24 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/40">
+                  <span>
+                    <span className="block text-sm font-medium text-saffron">{shortCode(full)}</span>
+                    <span className="mt-0.5 line-clamp-2 text-base leading-snug font-medium">{title}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{vachCount(byVach, n)} અમૃત બિંદુ</span>
+                </a>
+              )
+            })}
+          </div>
+          <a href={linkTo({ t: VACHS })}
+            className="press group mt-3 flex items-center justify-center gap-1.5 rounded-2xl border border-dashed py-3.5 text-sm font-medium text-saffron transition-colors duration-150 hover:border-saffron/50">
+            બધાં {BOOK.reduce((n, [, a, b]) => n + b - a + 1, 0)} વચનામૃત જુઓ
+            <ChevronRight className="size-4 transition-transform duration-200 ease-(--ease-out) group-hover:translate-x-0.5" />
+          </a>
         </>
       )}
 
@@ -1280,20 +1412,136 @@ const TOPIC_GROUPS: [string, string[]][] = [
  * Tapping a tab scrolls to its group; scrolling moves the saffron pill. A topic pill opens that topic with all subtopics.
  */
 function TopicsPage({ data }: { data: Data }) {
+  const placed = new Set(TOPIC_GROUPS.flatMap(([, ts]) => ts))
+  const others = Object.keys(data).filter((t) => !placed.has(t)) // safety net if the data gains a topic
+  return (
+    <GroupedPage
+      heading="બધા વિષયો"
+      placeholder="વિષય શોધો… / English"
+      groups={(query) => [...TOPIC_GROUPS, ...(others.length ? [["અન્ય", others] as [string, string[]]] : [])]
+        .map(([name, ts]) => [name, ts.filter((t) => t in data && (!query || matches(t, query)))] as const)}
+      tile={(t) => (
+        <a key={t} href={linkTo({ t })} className={TILE}>
+          <span className="text-sm leading-snug font-medium">{t}</span>
+          <span className="text-xs leading-relaxed text-muted-foreground tabular-nums">
+            {data[t].length} પેટા વિષય<br />{total(data[t])} અમૃત બિંદુ
+          </span>
+        </a>
+      )}
+    />
+  )
+}
+
+/**
+ * Vachanamrut tab: each section of the book opens with a painted banner, then its contents as rows
+ * (number badge, title, amrut bindu count). Ones with no amrut bindu are greyed with "—".
+ */
+function VachPage({ byVach }: { byVach: ByVach }) {
+  const favs = useFavVachs()
+  // coming back from a Vachanamrut: land on its row, not the top (after App's scroll-to-top on page change)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => document.getElementById(`v${lastVach}`)?.scrollIntoView({ block: "center" }))
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const find = (query: string) => (n: number) => {
+    if (!query) return true
+    const [full, short, title] = vachLabel(Math.abs(n))
+    // "loya 6" / "લોયા ૬": words match the name or title (English works too); a number must be this one exactly
+    const [, words, num] = query.match(/^(.*?)\s*([0-9૦-૯]*)$/)!
+    if (num && asciiDigits(short).replace(/\D/g, "") !== asciiDigits(num)) return false
+    return !words || matches(`${full} ${title}`, words)
+  }
+  return (
+    <GroupedPage
+      heading="વચનામૃત"
+      placeholder="નંબર કે નામ શોધો… (દા.ત. લોયા ૬)"
+      list
+      groups={(query) => [
+        // your saved ones first (negative = a copy of the row; the book's row keeps the id)
+        [SAVED_VACHS, favs.filter((n) => byVach.has(n)).map((n) => -n).filter(find(query))] as const,
+        ...BOOK.map(([name, a, b]) => [name, Array.from({ length: b - a + 1 }, (_, k) => a + k)
+          .filter((n) => titles[n] !== undefined || byVach.has(n)).filter(find(query))] as const),
+      ]}
+      banner={(name, ns, g) => {
+        if (name === SAVED_VACHS)
+          return (
+            <h2 className="mb-1 flex items-baseline gap-2 text-sm font-semibold">
+              <Heart className="size-3.5 self-center fill-rose-500 text-rose-500" /> સાચવેલાં વચનામૃત
+              <span className="text-xs font-normal text-muted-foreground tabular-nums">{ns.length}</span>
+            </h2>
+          )
+        const img = g % 2 ? IMAGES.sabha : IMAGES.manuscript
+        const bindus = ns.reduce((sum, n) => sum + vachCount(byVach, n), 0)
+        return (
+          <div className="relative mb-2 h-28 overflow-hidden rounded-2xl border md:h-36">
+            {/* the two paintings, cropped differently per section so neighbours don't repeat */}
+            <img src={img.src} alt="" loading="lazy" className="absolute inset-0 size-full object-cover"
+              style={{ objectPosition: `${[50, 20, 80, 35, 65][Math.floor(g / 2) % 5]}% ${[40, 25, 60, 30, 50][g % 5]}%` }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/70 to-background/10" />
+            <div className="absolute inset-x-4 bottom-3">
+              <h2 className="font-serif text-xl leading-tight font-semibold tracking-tight md:text-2xl">{name}</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">{ns.length} વચનામૃત · {bindus} અમૃત બિંદુ</p>
+            </div>
+          </div>
+        )
+      }}
+      tile={(item) => {
+        const n = Math.abs(item)
+        const [full, , title] = vachLabel(n)
+        const c = vachCount(byVach, n)
+        const fav = favs.includes(n)
+        const body = (
+          <>
+            {/* the book's own short code: "ગ. પ્ર. ૧", "લો. ૬", "જે. ૨" */}
+            <span className={cn("w-[3.75rem] shrink-0 text-sm leading-snug font-medium whitespace-nowrap tabular-nums", c ? "text-saffron" : "text-muted-foreground")}>
+              {shortCode(full)}
+            </span>
+            <span className="block min-w-0 flex-1 truncate text-sm leading-snug">{title}</span>
+            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{c || "—"}</span>
+          </>
+        )
+        const row = "flex min-h-14 items-center border-b border-foreground/[0.06]"
+        return c ? (
+          <div key={item} id={item > 0 ? `v${n}` : undefined} className={row}>
+            <a href={linkTo({ t: vachRoute(n) })}
+              className="press flex min-w-0 flex-1 items-center gap-3 self-stretch rounded-lg px-1 py-2 transition-colors duration-150 hover:bg-saffron-soft">{body}</a>
+            <button onClick={() => toggleFavVach(n)} aria-pressed={fav} aria-label={fav ? "સાચવેલાંમાંથી કાઢો" : "વચનામૃત સાચવો"}
+              className="press grid size-11 shrink-0 place-items-center rounded-full">
+              <Heart className={cn("size-[18px] transition-colors duration-150", fav ? "fill-rose-500 text-rose-500" : "text-muted-foreground/50")} />
+            </button>
+          </div>
+        ) : (
+          <div key={item} id={item > 0 ? `v${n}` : undefined} aria-disabled className={cn(row, "gap-3 py-2 pr-11 pl-1 opacity-45")} title="આ વચનામૃતમાંથી અમૃત બિંદુ નથી">{body}</div>
+        )
+      }}
+    />
+  )
+}
+
+const TILE = "press flex min-h-24 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/50 hover:bg-saffron-soft"
+
+/**
+ * Grouped tiles under a sliding tab bar (idea: transitions.dev "Tabs sliding") — used by the Topics and Vachanamrut tabs.
+ * Tapping a tab scrolls to its group; scrolling moves the saffron pill.
+ */
+function GroupedPage<T>({ heading, placeholder, groups: makeGroups, tile, banner, list }: {
+  heading: string; placeholder: string; groups: (query: string) => (readonly [string, T[]])[]; tile: (item: T) => React.ReactNode
+  banner?: (name: string, items: T[], g: number) => React.ReactNode // replaces the plain heading
+  list?: boolean // rows instead of the 2-up grid
+}) {
   const [q, setQ] = useState("")
   const [active, setActive] = useState(0)
   const query = q.trim()
-  const placed = new Set(TOPIC_GROUPS.flatMap(([, ts]) => ts))
-  const others = Object.keys(data).filter((t) => !placed.has(t)) // safety net if the data gains a topic
-  const groups = [...TOPIC_GROUPS, ...(others.length ? [["અન્ય", others] as [string, string[]]] : [])]
-    .map(([name, ts]) => [name, ts.filter((t) => t in data && (!query || matches(t, query)))] as const)
-    .filter(([, ts]) => ts.length)
+  const groups = makeGroups(query).filter(([, ts]) => ts.length)
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
+  const strip = useRef<HTMLDivElement>(null)
+  const jumping = useRef(0) // while a tapped tab's scroll runs, scroll-spy stays out of the way
 
-  // Scroll-spy: the active theme is the last section whose heading has passed under the sticky header.
+  // Scroll-spy: the active group is the last section whose heading has passed under the sticky header.
   useEffect(() => {
     const main = document.querySelector("main")!
     const update = () => {
+      if (Date.now() < jumping.current) return
       const secs = Array.from(document.querySelectorAll<HTMLElement>("section[data-g]"))
       let g = 0
       for (const el of secs) if (el.getBoundingClientRect().top < 220) g = Number(el.dataset.g)
@@ -1305,27 +1553,37 @@ function TopicsPage({ data }: { data: Data }) {
     main.addEventListener("scroll", update, { passive: true })
     return () => main.removeEventListener("scroll", update)
   }, [query])
-  // braces matter: newer browsers return a Promise from scrollIntoView, and React would take it for a cleanup function
+  // Slide only the tab strip sideways. (scrollIntoView would also scroll the page and cancel a tapped tab's scroll.)
   useEffect(() => {
-    tabs.current[active]?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" })
+    const tab = tabs.current[active], el = strip.current
+    if (tab && el) el.scrollTo({ left: tab.offsetLeft - (el.clientWidth - tab.offsetWidth) / 2, behavior: "smooth" })
   }, [active])
+  const jump = (g: number) => {
+    const main = document.querySelector("main")!, sec = document.getElementById(`g${g}`)
+    if (!sec) return
+    jumping.current = Date.now() + 700
+    setActive(g)
+    const dy = sec.getBoundingClientRect().top - strip.current!.parentElement!.getBoundingClientRect().bottom - 8 // just under the sticky header
+    // a long smooth scroll takes seconds and feels broken — far sections jump, near ones glide
+    main.scrollTo({ top: main.scrollTop + dy, behavior: Math.abs(dy) > main.clientHeight * 1.5 ? "instant" : "smooth" })
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-10 md:px-10 md:pb-12">
       <div className="glow-header sticky top-0 z-10 -mx-4 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] pb-2 md:-mx-10 md:px-10 md:pt-8">
         <div className="flex min-h-12 items-center justify-between">
-          <h1 className="text-base font-semibold tracking-tight md:font-serif md:text-3xl">બધા વિષયો</h1>
-          <div className="md:hidden"><HeaderButtons /></div>
+          <h1 className="text-base font-semibold tracking-tight md:font-serif md:text-3xl">{heading}</h1>
+          <div className="md:hidden"><HeaderButtons themeOnly /></div>
         </div>
         <div className="relative mt-1 md:mt-4 md:max-w-md">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <SearchInput value={q} onChange={setQ} placeholder="વિષય શોધો… / English" className="h-11 rounded-xl pl-9" />
+          <SearchInput value={q} onChange={setQ} placeholder={placeholder} className="h-11 rounded-xl pl-9" />
         </div>
-        {/* theme tabs — the saffron pill slides between them */}
-        <div className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0" role="tablist">
+        {/* group tabs — the saffron pill slides between them */}
+        <div ref={strip} className="relative -mx-4 mt-3 flex gap-1 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0" role="tablist">
           {groups.map(([name], g) => (
             <button key={name} ref={(el) => void (tabs.current[g] = el)} role="tab" aria-selected={g === active}
-              onClick={() => (setActive(g), document.getElementById(`g${g}`)?.scrollIntoView({ behavior: "smooth", block: "start" }))}
+              onClick={() => jump(g)}
               className={cn("press relative shrink-0 rounded-full px-3.5 py-2 text-sm whitespace-nowrap transition-colors duration-150",
                 g === active ? "font-medium text-foreground" : "text-muted-foreground")}>
               {g === active && <motion.span layoutId="topic-tab" className="absolute inset-0 rounded-full bg-saffron-soft" transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }} />}
@@ -1337,20 +1595,12 @@ function TopicsPage({ data }: { data: Data }) {
 
       {groups.map(([name, ts], g) => (
         <section key={name} id={`g${g}`} data-g={g} className="scroll-mt-48 pt-5">
-          <h2 className="mb-3 flex items-baseline gap-2 text-sm font-semibold">
-            {name} <span className="text-xs font-normal text-muted-foreground tabular-nums">{ts.length}</span>
-          </h2>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            {ts.map((t) => (
-              <a key={t} href={linkTo({ t })}
-                className="press flex min-h-24 flex-col justify-between gap-2 rounded-2xl border bg-card p-3.5 transition-colors duration-150 hover:border-saffron/50 hover:bg-saffron-soft">
-                <span className="text-sm leading-snug font-medium">{t}</span>
-                <span className="text-xs leading-relaxed text-muted-foreground tabular-nums">
-                  {data[t].length} પેટા વિષય<br />{total(data[t])} અમૃત બિંદુ
-                </span>
-              </a>
-            ))}
-          </div>
+          {banner ? banner(name, ts, g) : (
+            <h2 className="mb-3 flex items-baseline gap-2 text-sm font-semibold">
+              {name} <span className="text-xs font-normal text-muted-foreground tabular-nums">{ts.length}</span>
+            </h2>
+          )}
+          <div className={list ? "grid grid-cols-1 md:grid-cols-2 md:gap-x-8" : "grid grid-cols-2 gap-2 md:grid-cols-3"}>{ts.map(tile)}</div>
         </section>
       ))}
       {!groups.length && <p className="py-16 text-center text-sm text-muted-foreground">કંઈ મળ્યું નહીં</p>}

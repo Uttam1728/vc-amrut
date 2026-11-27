@@ -3,7 +3,7 @@
 import json, re, time, urllib.parse, urllib.request
 from pathlib import Path
 
-OUT = Path(__file__).with_name("images-review")
+OUT = Path(__file__).resolve().parent.parent / "images-review"
 OUT.mkdir(exist_ok=True)
 API = "https://en.wikipedia.org/w/api.php"  # commons.wikimedia.org is blocked on this network; en.wikipedia serves Commons file info too
 UA = {"User-Agent": "vachanamrut-quotes-review/1.0 (personal study app; image review)"}

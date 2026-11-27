@@ -67,6 +67,16 @@ export function toggleSaved(item: Item) {
   savedStore.emit()
 }
 
+// ── Saved Vachanamruts (by number, newest first) ─────────────────────────
+let favVachs: number[] = JSON.parse(localStorage.getItem("favVachs") ?? "[]")
+const favVachStore = store("favvachchange", () => favVachs)
+export const useFavVachs = favVachStore.use
+export function toggleFavVach(n: number) {
+  favVachs = favVachs.includes(n) ? favVachs.filter((x) => x !== n) : [n, ...favVachs]
+  localStorage.setItem("favVachs", JSON.stringify(favVachs))
+  favVachStore.emit()
+}
+
 // ── Route in the hash: #a=<short code>, or legacy #t=<topic>&s=<subtopic>&q=<card number> ──
 export type Route = { a?: string; t?: string; s?: string; q?: number }
 let routeCache = { hash: "\0", route: {} as Route }

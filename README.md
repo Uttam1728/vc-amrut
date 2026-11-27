@@ -4,9 +4,23 @@ Quotes from the Vachanamrut, by topic, as swipeable cards — for students.
 Live: **https://vachanamrut-amrutbindu.pages.dev**
 
 - 65 topics · 862 subtopics · 1,635 amrut bindu, each linked to its Vachanamrut
-- Swipe cards (phone), list + sidebar (desktop), search in Gujarati or English
-- Today's 5 Vachanamrut, save ♥, your own lists, share as a picture card
+- Browse by topic or by Vachanamrut (all 273, by section); swipe cards on phone, list + sidebar on desktop
+- Search in Gujarati or English · today's 5 amrut bindu · save ♥ cards and Vachanamruts · your own lists
+- Share as a picture card · PDF of any list · light/dark and text size
 - Works offline and installs to the home screen
+
+## Layout
+
+```
+web/              the app (Vite + React + Tailwind) — deployed to Cloudflare Pages
+  public/         subtopics.json + vach.json (the data the app loads), images, service worker
+  functions/      /api/feedback → Cloudflare D1
+data/             raw scraped data: topics.json, subtopics.json, subject-index.json
+scripts/          scrape.py (quotes), vach_titles.py (titles), fetch_*images.py (image candidates)
+promo/            promo video: script, choreography, recorder (media files stay local)
+parked/feelings/  "how are you feeling?" mapping — paused, not used by the app
+PROJECT_NOTES.md  decisions, state and commands — read first
+```
 
 ## Run
 
@@ -27,10 +41,11 @@ npx wrangler pages deploy dist --project-name vachanamrut-amrutbindu --branch ma
 
 ## Data
 
-- `scrape.py` → `topics.json`, `subtopics.json` (quotes per topic/subtopic) from
+- `python3 scripts/scrape.py` → `data/topics.json`, `data/subtopics.json` (quotes per topic/subtopic) from
   [anirdesh.com](https://www.anirdesh.com/vachanamrut/vach-quotes.php). Re-run to refresh; it resumes where it stopped.
-- `web/public/vach.json` — Vachanamrut titles by number.
-- `feelings.txt` → `python3 feelings.py` → `web/public/feelings.json` (work in progress, not used by the app yet).
+  The app reads it through a link: `web/public/subtopics.json → ../../data/subtopics.json`.
+- `python3 scripts/vach_titles.py` → `web/public/vach.json` — Vachanamrut titles by number.
+- `parked/feelings/` — `feelings.txt` → `python3 parked/feelings/feelings.py` → `feelings.json` (paused).
 
 ## Credits
 

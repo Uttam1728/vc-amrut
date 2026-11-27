@@ -4,8 +4,9 @@ import json, re, time, urllib.request
 from html import unescape
 from pathlib import Path
 
-OUT = Path(__file__).with_name("web") / "public" / "vach.json"
-data = json.loads(Path(__file__).with_name("subtopics.json").read_text())
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "web" / "public" / "vach.json"
+data = json.loads((ROOT / "data" / "subtopics.json").read_text())
 nos = sorted({q["vachno"] for subs in data.values() for s in subs for q in s.get("quotes") or []})
 titles = json.loads(OUT.read_text()) if OUT.exists() else {}
 

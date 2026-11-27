@@ -4,7 +4,7 @@ from html import unescape
 from pathlib import Path
 
 BASE = "https://www.anirdesh.com/vachanamrut/vach-quotes.php"
-OUT = Path(__file__).parent
+OUT = Path(__file__).resolve().parent.parent / "data"  # repo/data
 
 
 def get(url):
